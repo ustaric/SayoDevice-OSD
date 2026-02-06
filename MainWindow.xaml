@@ -6,50 +6,58 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- 최상단: 언어 설정 -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,5,5">
+            <TextBlock Text="Language: " VerticalAlignment="Center" Margin="0,0,5,0"/>
+            <ComboBox x:Name="CboLanguage" Width="114" SelectionChanged="CboLanguage_SelectionChanged">
+            </ComboBox>
+        </StackPanel>
+
         <!-- 상단: 장치 설정 -->
-        <GroupBox Header="장치 설정 (장치 관리자에서 확인)" Grid.Row="0" Padding="5">
+        <GroupBox x:Name="GrpDevice" Header="장치 설정 (장치 관리자에서 확인)" Grid.Row="1" Padding="5">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="VID:" VerticalAlignment="Center"/>
                 <TextBox x:Name="TxtVid" Width="60" Text="8089" Margin="5,0,0,0"/>
-                <Button Content="검색" Click="BtnScan_Click" Margin="5,0,0,0" Padding="5,0"/>
+                <Button x:Name="BtnScan" Content="검색" Click="BtnScan_Click" Margin="5,0,0,0" Padding="5,0"/>
                 <ComboBox x:Name="CboDevices" Width="150" Margin="10,0,0,0" VerticalAlignment="Center" SelectionChanged="CboDevices_SelectionChanged"/>
                 <TextBlock Text="PID:" VerticalAlignment="Center" Margin="10,0,0,0"/>
                 <TextBox x:Name="TxtPid" Width="60" Text="000B" Margin="5,0,0,0"/>
-                <Button Content="적용" Click="BtnApply_Click" Margin="10,0,0,0" Padding="5,0"/>
+                <Button x:Name="BtnApply" Content="적용" Click="BtnApply_Click" Margin="10,0,0,0" Padding="5,0"/>
                 <TextBlock Text="* SayoDevice만 감지합니다." Foreground="Gray" VerticalAlignment="Center" Margin="10,0,0,0"/>
             </StackPanel>
         </GroupBox>
 
         <!-- 중단 1: OSD 설정 -->
-        <GroupBox Header="OSD 설정" Grid.Row="1" Padding="5" Margin="0,5">
+        <GroupBox x:Name="GrpOsd" Header="OSD 설정" Grid.Row="2" Padding="5" Margin="0,5">
             <StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                    <TextBlock Text="투명도:" VerticalAlignment="Center" Width="50"/>
+                    <TextBlock x:Name="LblOpacity" Text="투명도:" VerticalAlignment="Center" Width="50"/>
                     <Slider x:Name="SldOpacity" Width="150" Minimum="0.1" Maximum="1.0" Value="0.8" TickFrequency="0.1" IsSnapToTickEnabled="True" VerticalAlignment="Center" ValueChanged="SldOpacity_ValueChanged"/>
                     <TextBlock Text="{Binding ElementName=SldOpacity, Path=Value, StringFormat=N1}" VerticalAlignment="Center" Margin="5,0,0,0"/>
                     
-                    <TextBlock Text="표시 시간(초):" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                    <TextBlock x:Name="LblTimeout" Text="표시 시간(초):" VerticalAlignment="Center" Margin="20,0,0,0"/>
                     <TextBox x:Name="TxtTimeout" Width="40" Text="3" Margin="5,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="표시 모드:" VerticalAlignment="Center" Width="60"/>
+                    <TextBlock x:Name="LblMode" Text="표시 모드:" VerticalAlignment="Center" Width="60"/>
                     <ComboBox x:Name="CboMode" SelectedIndex="0" Width="120" VerticalAlignment="Center" SelectionChanged="CboMode_SelectionChanged">
                         <ComboBoxItem Content="자동 (입력 시 표시)"/>
                         <ComboBoxItem Content="항상 켜기"/>
                         <ComboBoxItem Content="항상 끄기"/>
                     </ComboBox>
                     <CheckBox x:Name="ChkMoveOsd" Content="OSD 위치 이동 허용" VerticalAlignment="Center" Margin="10,0,0,0" Checked="ChkMoveOsd_CheckedChanged" Unchecked="ChkMoveOsd_CheckedChanged"/>
-                    <Button Content="크기 초기화" Click="BtnResetSize_Click" Margin="10,0,0,0" Padding="5,0"/>
+                    <Button x:Name="BtnResetSize" Content="크기 초기화" Click="BtnResetSize_Click" Margin="10,0,0,0" Padding="5,0"/>
                 </StackPanel>
             </StackPanel>
         </GroupBox>
 
         <!-- 중단: 키 매핑 리스트 -->
-        <GroupBox Header="키 매핑 설정 (settings.json 직접 수정 권장)" Grid.Row="2" Margin="0,10">
+        <GroupBox x:Name="GrpMap" Header="키 매핑 설정 (settings.json 직접 수정 권장)" Grid.Row="3" Margin="0,10">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
@@ -58,20 +66,20 @@
                 <ListView x:Name="LstLog" SelectionMode="Extended" KeyDown="LstLog_KeyDown">
                     <ListView.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="복사" Click="BtnCopyLog_Click"/>
+                            <MenuItem x:Name="MnuCopy" Header="복사" Click="BtnCopyLog_Click"/>
                         </ContextMenu>
                     </ListView.ContextMenu>
                     <ListView.View>
                         <GridView>
-                            <GridViewColumn Header="시간" DisplayMemberBinding="{Binding Time}" Width="70"/>
-                            <GridViewColumn Header="키값(Hex)" DisplayMemberBinding="{Binding RawKeyHex}" Width="70"/>
-                            <GridViewColumn Header="전체 데이터" DisplayMemberBinding="{Binding Data}" Width="530"/>
+                            <GridViewColumn x:Name="ColTime" Header="시간" DisplayMemberBinding="{Binding Time}" Width="70"/>
+                            <GridViewColumn x:Name="ColKey" Header="키값(Hex)" DisplayMemberBinding="{Binding RawKeyHex}" Width="70"/>
+                            <GridViewColumn x:Name="ColData" Header="전체 데이터" DisplayMemberBinding="{Binding Data}" Width="530"/>
                         </GridView>
                     </ListView.View>
                 </ListView>
                 <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,5,0,0" HorizontalAlignment="Right">
                     <CheckBox x:Name="ChkPauseLog" Content="로그 일시정지" VerticalAlignment="Center" Margin="0,0,15,0"/>
-                    <TextBlock Text="레이어:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBlock x:Name="LblLayer" Text="레이어:" VerticalAlignment="Center" Margin="0,0,5,0"/>
                     <ComboBox x:Name="CboLayer" Width="60" VerticalAlignment="Center" SelectionChanged="CboLayer_SelectionChanged" SelectedIndex="0">
                         <ComboBoxItem Content="Fn 0"/>
                         <ComboBoxItem Content="Fn 1"/>
@@ -79,12 +87,12 @@
                         <ComboBoxItem Content="Fn 3"/>
                         <ComboBoxItem Content="Fn 4"/>
                     </ComboBox>
-                    <TextBlock Text="슬롯:" VerticalAlignment="Center" Margin="10,0,5,0"/>
+                    <TextBlock x:Name="LblSlot" Text="슬롯:" VerticalAlignment="Center" Margin="10,0,5,0"/>
                     <ComboBox x:Name="CboMapSlot" Width="100" VerticalAlignment="Center" SelectionChanged="CboMapSlot_SelectionChanged"/>
-                    <TextBlock Text="이름:" VerticalAlignment="Center" Margin="10,0,5,0"/>
+                    <TextBlock x:Name="LblName" Text="이름:" VerticalAlignment="Center" Margin="10,0,5,0"/>
                     <TextBox x:Name="TxtKeyName" Width="80" VerticalAlignment="Center"/>
-                    <Button Content="이름변경" Click="BtnRename_Click" Padding="5,2" Margin="5,0,10,0"/>
-                    <TextBlock Text="이동:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <Button x:Name="BtnRename" Content="이름변경" Click="BtnRename_Click" Padding="5,2" Margin="5,0,10,0"/>
+                    <TextBlock x:Name="LblTarget" Text="이동:" VerticalAlignment="Center" Margin="0,0,5,0"/>
                     <ComboBox x:Name="CboTargetLayer" Width="80" VerticalAlignment="Center" SelectedIndex="0">
                         <ComboBoxItem Content="이동 없음" Tag="-1"/>
                         <ComboBoxItem Content="Fn 0" Tag="0"/>
@@ -93,19 +101,19 @@
                         <ComboBoxItem Content="Fn 3" Tag="3"/>
                         <ComboBoxItem Content="Fn 4" Tag="4"/>
                     </ComboBox>
-                    <TextBlock Text="선택한 신호:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBlock x:Name="LblSignal" Text="선택한 신호:" VerticalAlignment="Center" Margin="0,0,5,0"/>
                     <Button x:Name="BtnAutoDetect" Content="자동 감지" Click="BtnAutoDetect_Click" Padding="10,2"/>
-                    <Button Content="매핑해제" Click="BtnUnmap_Click" Padding="10,2" Margin="5,0,0,0"/>
+                    <Button x:Name="BtnUnmap" Content="매핑해제" Click="BtnUnmap_Click" Padding="10,2" Margin="5,0,0,0"/>
                 </StackPanel>
             </Grid>
         </GroupBox>
 
         <!-- 하단: 버튼 -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
             <CheckBox x:Name="ChkEnableFileLog" Content="로그 파일 저장" VerticalAlignment="Center" Margin="0,0,15,0" IsChecked="False"/>
             <CheckBox x:Name="ChkStartWithWindows" Content="윈도우 시작 시 자동 실행" VerticalAlignment="Center" Margin="0,0,10,0" Checked="ChkStartWithWindows_Checked" Unchecked="ChkStartWithWindows_Checked"/>
-            <Button Content="설정 저장" Click="BtnSave_Click" Padding="10,5" Margin="5"/>
-            <Button Content="트레이로 숨기기" Click="BtnHide_Click" Padding="10,5" Margin="5"/>
+            <Button x:Name="BtnSave" Content="설정 저장" Click="BtnSave_Click" Padding="10,5" Margin="5"/>
+            <Button x:Name="BtnHide" Content="트레이로 숨기기" Click="BtnHide_Click" Padding="10,5" Margin="5"/>
         </StackPanel>
     </Grid>
 </Window>

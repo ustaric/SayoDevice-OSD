@@ -49,6 +49,26 @@ namespace SayoOSD
             SldOpacity.Value = _settings.OsdOpacity;
             TxtTimeout.Text = _settings.OsdTimeout.ToString();
             CboMode.SelectedIndex = _settings.OsdMode;
+
+            // 언어 데이터 로드
+            LanguageManager.Load();
+            
+            // 언어 콤보박스 구성 (완성도 % 표시)
+            CboLanguage.Items.Clear();
+            foreach (var lang in LanguageManager.GetLanguages())
+            {
+                int percent = lang.GetCompletionPercentage(LanguageManager.Keys.Count);
+                var item = new System.Windows.Controls.ComboBoxItem();
+                item.Content = $"{lang.Name} ({percent}%)";
+                item.Tag = lang.Code;
+                CboLanguage.Items.Add(item);
+                
+                // 현재 설정된 언어 선택
+                if (lang.Code == _settings.Language) CboLanguage.SelectedItem = item;
+            }
+            if (CboLanguage.SelectedIndex < 0 && CboLanguage.Items.Count > 0) CboLanguage.SelectedIndex = 0;
+            
+            UpdateLanguage(); // 초기 언어 적용
             
             // OSD 설정 적용
             _osd.UpdateSettings(_settings);
@@ -486,7 +506,8 @@ namespace SayoOSD
                 AppSettings.Save(_settings);
                 _osd.UpdateNames(_settings.Buttons, layer);
                 RefreshSlotList(); // 콤보박스 이름 갱신
-                System.Windows.MessageBox.Show("이름이 변경되었습니다.");
+                string msg = LanguageManager.GetString(_settings.Language, "MsgNameChanged");
+                System.Windows.MessageBox.Show(msg);
             }
         }
 
@@ -500,18 +521,19 @@ namespace SayoOSD
 
             if (CboMapSlot.SelectedIndex < 0)
             {
-                System.Windows.MessageBox.Show("매핑할 슬롯을 먼저 선택해주세요.");
+                string msg = LanguageManager.GetString(_settings.Language, "MsgSelectSlot");
+                System.Windows.MessageBox.Show(msg);
                 return;
             }
 
             _startSignature = _lastSignature; // 현재 노이즈(기본 신호) 저장
             _isListening = true;
-            BtnAutoDetect.Content = "감지 중...";
+            BtnAutoDetect.Content = LanguageManager.GetString(_settings.Language, "MsgDetecting");
 
             // 신호 선택 창 생성
             _candidateWindow = new Window
             {
-                Title = "신호 선택 (키를 누르세요)",
+                Title = LanguageManager.GetString(_settings.Language, "TitleSelectSignal"),
                 Width = 350,
                 Height = 400,
                 Owner = this,
@@ -555,7 +577,7 @@ namespace SayoOSD
             _candidateWindow.Closed += (s, args) =>
             {
                 _isListening = false;
-                BtnAutoDetect.Content = "자동 감지";
+                BtnAutoDetect.Content = LanguageManager.GetString(_settings.Language, "BtnAutoDetect");
                 _candidateWindow = null;
                 _candidateListBox = null;
             };
@@ -589,7 +611,7 @@ namespace SayoOSD
                     _osd.UpdateNames(_settings.Buttons, layer);
                     RefreshSlotList(); // 콤보박스 목록 갱신 및 UI 업데이트
 
-                    System.Windows.MessageBox.Show("매핑이 해제되었습니다.");
+                    System.Windows.MessageBox.Show(LanguageManager.GetString(_settings.Language, "MsgUnmapped"));
                 }
             }
         }
@@ -707,6 +729,75 @@ namespace SayoOSD
                 sb.AppendLine($"{item.Time}\t{item.RawKeyHex}\t{item.Data}");
             }
             try { System.Windows.Clipboard.SetText(sb.ToString()); } catch { }
+        }
+
+        private void CboLanguage_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_settings == null || CboLanguage == null) return;
+            
+            if (CboLanguage.SelectedItem is System.Windows.Controls.ComboBoxItem item)
+            {
+                string lang = item.Tag.ToString();
+                if (_settings.Language != lang)
+                {
+                    _settings.Language = lang;
+                    UpdateLanguage();
+                    AppSettings.Save(_settings);
+                }
+            }
+        }
+
+        private void UpdateLanguage()
+        {
+            string lang = _settings.Language;
+
+            this.Title = LanguageManager.GetString(lang, "Title");
+
+            if (GrpDevice != null) GrpDevice.Header = LanguageManager.GetString(lang, "GrpDevice");
+            if (BtnScan != null) BtnScan.Content = LanguageManager.GetString(lang, "BtnScan");
+            if (BtnApply != null) BtnApply.Content = LanguageManager.GetString(lang, "BtnApply");
+
+            if (GrpOsd != null) GrpOsd.Header = LanguageManager.GetString(lang, "GrpOsd");
+            if (LblOpacity != null) LblOpacity.Text = LanguageManager.GetString(lang, "LblOpacity");
+            if (LblTimeout != null) LblTimeout.Text = LanguageManager.GetString(lang, "LblTimeout");
+            if (LblMode != null) LblMode.Text = LanguageManager.GetString(lang, "LblMode");
+            
+            if (CboMode != null && CboMode.Items.Count >= 3)
+            {
+                (CboMode.Items[0] as System.Windows.Controls.ComboBoxItem).Content = LanguageManager.GetString(lang, "ModeAuto");
+                (CboMode.Items[1] as System.Windows.Controls.ComboBoxItem).Content = LanguageManager.GetString(lang, "ModeOn");
+                (CboMode.Items[2] as System.Windows.Controls.ComboBoxItem).Content = LanguageManager.GetString(lang, "ModeOff");
+            }
+
+            if (ChkMoveOsd != null) ChkMoveOsd.Content = LanguageManager.GetString(lang, "ChkMoveOsd");
+            if (BtnResetSize != null) BtnResetSize.Content = LanguageManager.GetString(lang, "BtnResetSize");
+
+            if (GrpMap != null) GrpMap.Header = LanguageManager.GetString(lang, "GrpMap");
+            if (ColTime != null) ColTime.Header = LanguageManager.GetString(lang, "ColTime");
+            if (ColKey != null) ColKey.Header = LanguageManager.GetString(lang, "ColKey");
+            if (ColData != null) ColData.Header = LanguageManager.GetString(lang, "ColData");
+            if (MnuCopy != null) MnuCopy.Header = LanguageManager.GetString(lang, "MnuCopy");
+
+            if (ChkPauseLog != null) ChkPauseLog.Content = LanguageManager.GetString(lang, "ChkPauseLog");
+            if (LblLayer != null) LblLayer.Text = LanguageManager.GetString(lang, "LblLayer");
+            if (LblSlot != null) LblSlot.Text = LanguageManager.GetString(lang, "LblSlot");
+            if (LblName != null) LblName.Text = LanguageManager.GetString(lang, "LblName");
+            if (BtnRename != null) BtnRename.Content = LanguageManager.GetString(lang, "BtnRename");
+            if (LblTarget != null) LblTarget.Text = LanguageManager.GetString(lang, "LblTarget");
+            
+            if (CboTargetLayer != null && CboTargetLayer.Items.Count > 0)
+            {
+                (CboTargetLayer.Items[0] as System.Windows.Controls.ComboBoxItem).Content = LanguageManager.GetString(lang, "TargetNone");
+            }
+
+            if (LblSignal != null) LblSignal.Text = LanguageManager.GetString(lang, "LblSignal");
+            if (BtnAutoDetect != null) BtnAutoDetect.Content = LanguageManager.GetString(lang, "BtnAutoDetect");
+            if (BtnUnmap != null) BtnUnmap.Content = LanguageManager.GetString(lang, "BtnUnmap");
+
+            if (ChkEnableFileLog != null) ChkEnableFileLog.Content = LanguageManager.GetString(lang, "ChkEnableFileLog");
+            if (ChkStartWithWindows != null) ChkStartWithWindows.Content = LanguageManager.GetString(lang, "ChkStartWithWindows");
+            if (BtnSave != null) BtnSave.Content = LanguageManager.GetString(lang, "BtnSave");
+            if (BtnHide != null) BtnHide.Content = LanguageManager.GetString(lang, "BtnHide");
         }
     }
 }

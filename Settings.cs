@@ -27,6 +27,7 @@ namespace SayoOSD
         public double OsdHeight { get; set; } = -1;     // OSD 창 높이 (-1이면 기본값)
         public int OsdBackgroundAlpha { get; set; } = 50; // 배경 투명도 (0~255)
         public int LastLayerIndex { get; set; } = 0;    // 마지막 사용 레이어 (0~4)
+        public string Language { get; set; } = "KO";    // 언어 설정 (KO/EN)
         public List<ButtonConfig> Buttons { get; set; } = new List<ButtonConfig>();
 
         public AppSettings()
