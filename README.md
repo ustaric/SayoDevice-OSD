@@ -1,3 +1,4 @@
+<a id="readme-top"></a>
 # SayoDevice OSD (Unofficial)
 
 <!-- Language Links -->
@@ -63,6 +64,8 @@ It detects button input signals and visually displays the current key and layer 
 
 This project follows the **MIT License**.
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ---
 
 <a id="korean"></a>
@@ -123,6 +126,8 @@ SayoDevice 키패드 사용자를 위한 **비공식** OSD(On-Screen Display) �
 
 이 프로젝트는 **MIT 라이선스**를 따릅니다. 자유롭게 수정하고 배포하셔도 됩니다.
 
+<p align="right">(<a href="#readme-top">맨 위로</a>)</p>
+
 ---
 
 <a id="french"></a>
@@ -177,6 +182,8 @@ Il détecte les signaux d'entrée des boutons et affiche visuellement la touche 
 ### Licence
 
 Ce projet suit la **Licence MIT**.
+
+<p align="right">(<a href="#readme-top">Haut de page</a>)</p>
 
 ---
 
@@ -233,6 +240,8 @@ Detecta las señales de entrada de los botones y muestra visualmente la tecla ac
 
 Este proyecto sigue la **Licencia MIT**.
 
+<p align="right">(<a href="#readme-top">Volver arriba</a>)</p>
+
 ---
 
 <a id="chinese"></a>
@@ -288,6 +297,8 @@ Este proyecto sigue la **Licencia MIT**.
 
 本项目遵循 **MIT 许可证**。
 
+<p align="right">(<a href="#readme-top">回到顶部</a>)</p>
+
 ---
 
 <a id="german"></a>
@@ -342,6 +353,8 @@ Es erkennt Tasteneingabesignale und zeigt die aktuelle Taste und Ebeneninformati
 ### Lizenz
 
 Dieses Projekt folgt der **MIT-Lizenz**.
+
+<p align="right">(<a href="#readme-top">Nach oben</a>)</p>
 
 ---
 
