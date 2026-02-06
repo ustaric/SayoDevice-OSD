@@ -563,6 +563,37 @@ namespace SayoOSD
             _candidateWindow.Show();
         }
 
+        private void BtnUnmap_Click(object sender, RoutedEventArgs e)
+        {
+            if (CboMapSlot.SelectedIndex < 0)
+            {
+                System.Windows.MessageBox.Show("매핑을 해제할 슬롯을 선택해주세요.");
+                return;
+            }
+
+            int layer = CboLayer.SelectedIndex < 0 ? 0 : CboLayer.SelectedIndex;
+            int slotIndex = CboMapSlot.SelectedIndex + 1;
+
+            var btn = _settings.Buttons.FirstOrDefault(b => b.Layer == layer && b.Index == slotIndex);
+            if (btn != null)
+            {
+                if (System.Windows.MessageBox.Show($"Key {slotIndex} (Layer {layer})의 매핑 정보를 초기화하시겠습니까?", 
+                    "매핑 해제", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                {
+                    btn.TriggerPattern = null;
+                    btn.TargetLayer = -1;
+                    btn.Name = $"Key {slotIndex}"; // 기본 이름으로 복구
+
+                    AppSettings.Save(_settings);
+
+                    _osd.UpdateNames(_settings.Buttons, layer);
+                    RefreshSlotList(); // 콤보박스 목록 갱신 및 UI 업데이트
+
+                    System.Windows.MessageBox.Show("매핑이 해제되었습니다.");
+                }
+            }
+        }
+
         private void PerformAutoMapping(string signature)
         {
             int layer = CboLayer.SelectedIndex < 0 ? 0 : CboLayer.SelectedIndex;
