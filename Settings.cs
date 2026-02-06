@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿﻿﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json; // System.Text.Json 패키지 필요 (최신 .NET 기본 포함)
@@ -28,6 +28,7 @@ namespace SayoOSD
         public int OsdBackgroundAlpha { get; set; } = 50; // 배경 투명도 (0~255)
         public int LastLayerIndex { get; set; } = 0;    // 마지막 사용 레이어 (0~4)
         public string Language { get; set; } = "KO";    // 언어 설정 (KO/EN)
+        public bool EnableFileLog { get; set; } = false; // 로그 파일 저장 여부
         public List<ButtonConfig> Buttons { get; set; } = new List<ButtonConfig>();
 
         public AppSettings()
@@ -42,15 +43,21 @@ namespace SayoOSD
             }
         }
 
-        public static void Save(AppSettings settings, string path = "settings.json")
+        public static void Save(AppSettings settings, string path = null)
         {
+            if (string.IsNullOrEmpty(path))
+                path = Path.Combine(AppContext.BaseDirectory, "settings.json");
+
             var options = new JsonSerializerOptions { WriteIndented = true };
             string jsonString = JsonSerializer.Serialize(settings, options);
             File.WriteAllText(path, jsonString);
         }
 
-        public static AppSettings Load(string path = "settings.json")
+        public static AppSettings Load(string path = null)
         {
+            if (string.IsNullOrEmpty(path))
+                path = Path.Combine(AppContext.BaseDirectory, "settings.json");
+
             if (!File.Exists(path)) return new AppSettings();
             string jsonString = File.ReadAllText(path);
             var settings = JsonSerializer.Deserialize<AppSettings>(jsonString) ?? new AppSettings();

@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -35,8 +35,16 @@ namespace SayoOSD
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         extern static bool DestroyIcon(IntPtr handle);
 
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern uint RegisterWindowMessage(string lpString);
+        private uint _wmShowMessage;
+
         public MainWindow()
         {
+            // [핵심] App 클래스의 정적 생성자를 강제로 실행시켜 중복 검사를 가장 먼저 수행
+            // MainWindow가 StartupObject일 경우, InitializeComponent보다 먼저 실행되어야 창이 뜨지 않고 종료됨
+            var _ = App.StartupLogs; 
+
             InitializeComponent();
             _osd = new OsdWindow();
             _osd.DebugLog += (msg) => AppendLogFile(msg); // OSD 로그를 파일로 저장
@@ -49,6 +57,11 @@ namespace SayoOSD
             SldOpacity.Value = _settings.OsdOpacity;
             TxtTimeout.Text = _settings.OsdTimeout.ToString();
             CboMode.SelectedIndex = _settings.OsdMode;
+
+            // 로그 파일 저장 설정 적용 및 이벤트 연결
+            ChkEnableFileLog.IsChecked = _settings.EnableFileLog;
+            ChkEnableFileLog.Checked += ChkEnableFileLog_CheckedChanged;
+            ChkEnableFileLog.Unchecked += ChkEnableFileLog_CheckedChanged;
 
             // 언어 데이터 로드
             LanguageManager.Load();
@@ -78,7 +91,7 @@ namespace SayoOSD
             
             // 트레이 아이콘 설정
             // 0. icon.png 파일이 있으면 최우선으로 사용 (투명 배경 유지)
-            string pngPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.png");
+            string pngPath = System.IO.Path.Combine(AppContext.BaseDirectory, "icon.png");
             if (System.IO.File.Exists(pngPath))
             {
                 try
@@ -104,7 +117,7 @@ namespace SayoOSD
             // 1. PNG가 없을 경우: 실행 폴더의 icon.ico 파일 시도
             if (_notifyIcon.Icon == null)
             {
-                string iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.ico");
+                string iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "icon.ico");
                 if (System.IO.File.Exists(iconPath))
                 {
                     try { _notifyIcon.Icon = new System.Drawing.Icon(iconPath); } catch { }
@@ -202,25 +215,65 @@ namespace SayoOSD
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // 윈도우 핸들을 얻은 후 Raw Input 등록
-            IntPtr hwnd = new WindowInteropHelper(this).Handle;
-            _rawInput = new RawInputReceiver(hwnd, _settings.DeviceVid, _settings.DevicePid);
-            _rawInput.HidDataReceived += OnHidDataReceived;
-            _rawInput.DebugLog += (msg) => Dispatcher.Invoke(() => Log(msg)); // 디버그 로그 연결
+            // 중복 실행 시 창 복구를 위한 메시지 등록
+            _wmShowMessage = RegisterWindowMessage("SayoOSD_Show_Window");
 
-            // 로그 연결 후 장치 검색 시작
-            _rawInput.Initialize();
+            // App.xaml.cs에서 기록된 시작 로그를 메인 화면 로그창에 출력
+            if (App.StartupLogs != null)
+            {
+                int count = App.StartupLogs.Count;
+                Log($"[System] App 로그 동기화 ({count}개)");
 
-            // 장치 목록 검색 및 콤보박스 갱신
-            RefreshDeviceList();
+                if (count > 0)
+                {
+                    // 리스트를 복사하여 순회 (열거 중 수정 오류 방지)
+                    var logs = App.StartupLogs.ToList();
+                    foreach (var logMsg in logs)
+                    {
+                        Log(logMsg);
+                    }
+                }
+                else
+                {
+                    Log("[System] 경고: App 로그가 비어있습니다. (App 초기화 문제 가능성)");
+                }
+                App.StartupLogs.Clear(); // 로그 출력 후 비우기 (중복 방지)
+            }
 
-            // 시작 시 OSD가 잘 뜨는지 테스트
-            _osd.ShowBriefly();
-            Log("프로그램 시작됨. OSD 테스트 표시.");
+            // UI 렌더링 및 초기 로그 출력이 완료된 후 장치 감지 시작 (DispatcherPriority.Background 사용)
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(async () =>
+            {
+                // [수정] 프로그램 시작 직후 키 로그가 쏟아져 App 로그가 묻히는 것을 방지하기 위해 5초 대기
+                await System.Threading.Tasks.Task.Delay(5000);
 
-            // 메시지 루프 훅 추가
-            HwndSource source = HwndSource.FromHwnd(hwnd);
-            source.AddHook(WndProc);
+                // 윈도우 핸들을 얻은 후 Raw Input 등록
+                IntPtr hwnd = new WindowInteropHelper(this).Handle;
+                _rawInput = new RawInputReceiver(hwnd, _settings.DeviceVid, _settings.DevicePid);
+                _rawInput.HidDataReceived += OnHidDataReceived;
+                _rawInput.DebugLog += (msg) => Dispatcher.Invoke(() => Log(msg)); // 디버그 로그 연결
+
+                // 로그 연결 후 장치 검색 시작
+                _rawInput.Initialize();
+
+                // 장치 목록 검색 및 콤보박스 갱신
+                RefreshDeviceList();
+
+                // 시작 시 OSD가 잘 뜨는지 테스트
+                _osd.ShowBriefly();
+                Log("프로그램 시작됨. OSD 테스트 표시.");
+
+                // 메시지 루프 훅 추가
+                HwndSource source = HwndSource.FromHwnd(hwnd);
+                source.AddHook(WndProc);
+            }));
+
+            // 자동 실행(--tray)으로 시작된 경우 트레이로 숨김
+            string[] args = Environment.GetCommandLineArgs();
+            if (args.Any(a => a.Equals("--tray", StringComparison.OrdinalIgnoreCase)))
+            {
+                this.WindowState = WindowState.Minimized;
+                this.Hide();
+            }
         }
 
         private void RefreshDeviceList()
@@ -331,6 +384,17 @@ namespace SayoOSD
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
+            // 중복 실행 시 기존 창 복구 메시지 처리
+            if (msg == _wmShowMessage && _wmShowMessage != 0)
+            {
+                Log("[System] 중복 실행 시도가 감지되어 창을 활성화했습니다.");
+                this.Show();
+                this.WindowState = WindowState.Normal;
+                this.Activate();
+                handled = true;
+                return IntPtr.Zero;
+            }
+
             // Raw Input 메시지 처리
             if (_rawInput != null)
                 _rawInput.ProcessMessage(msg, lParam);
@@ -422,6 +486,9 @@ namespace SayoOSD
                 Dispatcher.Invoke(() => _osd.HighlightKey(keyIndex));
             }
 
+            // 노이즈 필터링: C6로 시작하는 신호는 로그에 남기지 않음
+            if (hex.StartsWith("C6")) return;
+
             // 로그 일시정지면 로그 기록만 건너뜀
             if (ChkPauseLog.IsChecked == true) return;
 
@@ -457,14 +524,16 @@ namespace SayoOSD
                 RawKeyHex = rawKey == 0 ? "-" : rawKey.ToString("X2"),
                 RawKeyByte = rawKey,
                 RawBytes = data,
-                Data = dataHex
+                Data = string.IsNullOrEmpty(dataHex) ? msg : $"{dataHex} ({msg})"
             };
 
-            // UI 업데이트: 최소화 상태가 아닐 때만 수행 (최적화)
+            // [수정] 최소화 상태여도 로그는 리스트에 추가해야 함 (데이터 유실 방지)
+            LstLog.Items.Add(entry);
+            if (LstLog.Items.Count > 1000) LstLog.Items.RemoveAt(0);
+
+            // 스크롤만 최소화 상태가 아닐 때 수행 (UI 부하 방지)
             if (this.WindowState != WindowState.Minimized)
             {
-                LstLog.Items.Add(entry);
-                if (LstLog.Items.Count > 1000) LstLog.Items.RemoveAt(0); // 로그 보존 개수 증가 (100 -> 1000)
                 LstLog.ScrollIntoView(entry);
             }
 
@@ -481,7 +550,7 @@ namespace SayoOSD
 
             try
             {
-                string path = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "log.txt");
+                string path = System.IO.Path.Combine(AppContext.BaseDirectory, "log.txt");
                 string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
                 System.IO.File.AppendAllText(path, $"[{timestamp}] {message}{Environment.NewLine}");
             }
@@ -692,7 +761,7 @@ namespace SayoOSD
                     {
                         string path = Environment.ProcessPath; // 현재 실행 파일 경로 (.exe)
                         if (!string.IsNullOrEmpty(path))
-                            key.SetValue("SayoOSD", path);
+                            key.SetValue("SayoOSD", $"\"{path}\" --tray");
                     }
                     else
                     {
@@ -703,6 +772,15 @@ namespace SayoOSD
             catch (Exception ex)
             {
                 System.Windows.MessageBox.Show($"레지스트리 설정 실패: {ex.Message}");
+            }
+        }
+
+        private void ChkEnableFileLog_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            if (_settings != null)
+            {
+                _settings.EnableFileLog = ChkEnableFileLog.IsChecked == true;
+                AppSettings.Save(_settings);
             }
         }
 

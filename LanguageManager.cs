@@ -29,7 +29,7 @@ namespace SayoOSD
     public static class LanguageManager
     {
         private static LocalizationData _data;
-        private static string _filePath = "languages.json";
+        private static string _filePath = Path.Combine(AppContext.BaseDirectory, "languages.json");
         
         // UI에서 사용할 키 목록 (기준)
         public static readonly List<string> Keys = new List<string>
