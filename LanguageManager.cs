@@ -41,7 +41,7 @@ namespace SayoOSD
             "ChkPauseLog", "LblLayer", "LblSlot", "LblName", "BtnRename",
             "LblTarget", "TargetNone", "LblSignal", "BtnAutoDetect", "BtnUnmap",
             "ChkEnableFileLog", "ChkStartWithWindows", "BtnSave", "BtnHide",
-            "MsgNameChanged", "MsgSelectSlot", "MsgDetecting", "MsgSelectSignal",
+            "BtnOpenSettings", "MsgNameChanged", "MsgSelectSlot", "MsgDetecting", "MsgSelectSignal",
             "MsgUnmapConfirm", "MsgUnmapped", "MsgPatternMapped", "MsgVidApplied", "MsgSettingsSaved",
             "TitleSelectSignal", "TitleUnmap"
         };
@@ -89,6 +89,18 @@ namespace SayoOSD
                             {
                                 existingLang.Strings[kv.Key] = kv.Value;
                                 changed = true;
+                            }
+                            // [수정] "LblTarget" 키의 값이 구버전(단순 이동/Target)일 경우 "레이어 이동"으로 강제 업데이트
+                            else if (kv.Key == "LblTarget")
+                            {
+                                bool update = (existingLang.Code == "KO" && existingLang.Strings[kv.Key] == "이동:") ||
+                                              (existingLang.Code == "EN" && existingLang.Strings[kv.Key] == "Target:") ||
+                                              (existingLang.Code == "FR" && existingLang.Strings[kv.Key] == "Cible:") ||
+                                              (existingLang.Code == "ES" && existingLang.Strings[kv.Key] == "Destino:") ||
+                                              (existingLang.Code == "CN" && existingLang.Strings[kv.Key] == "目标:") ||
+                                              (existingLang.Code == "DE" && existingLang.Strings[kv.Key] == "Ziel:");
+                                
+                                if (update) { existingLang.Strings[kv.Key] = kv.Value; changed = true; }
                             }
                             // 2. 키는 있는데 값이 영어 기본값과 같고, 새로운 번역 데이터는 영어와 다르다면 업데이트 (번역 적용)
                             else if (defaultEn != null && defaultEn.Strings.ContainsKey(kv.Key))
@@ -158,10 +170,10 @@ namespace SayoOSD
                 { "ColTime", "시간" }, { "ColKey", "키값(Hex)" }, { "ColData", "전체 데이터" }, { "MnuCopy", "복사" },
                 { "ChkPauseLog", "로그 일시정지" },
                 { "LblLayer", "레이어:" }, { "LblSlot", "슬롯:" }, { "LblName", "이름:" }, { "BtnRename", "이름변경" },
-                { "LblTarget", "이동:" }, { "TargetNone", "이동 없음" },
+                { "LblTarget", "레이어 이동:" }, { "TargetNone", "이동 없음" },
                 { "LblSignal", "선택한 신호:" }, { "BtnAutoDetect", "자동 감지" }, { "BtnUnmap", "매핑해제" },
                 { "ChkEnableFileLog", "로그 파일 저장" }, { "ChkStartWithWindows", "윈도우 시작 시 자동 실행" },
-                { "BtnSave", "설정 저장" }, { "BtnHide", "트레이로 숨기기" },
+                { "BtnSave", "설정 저장" }, { "BtnHide", "트레이로 숨기기" }, { "BtnOpenSettings", "설정" },
                 { "MsgNameChanged", "이름이 변경되었습니다." },
                 { "MsgSelectSlot", "매핑할 슬롯을 먼저 선택해주세요." },
                 { "MsgDetecting", "감지 중..." },
@@ -192,10 +204,10 @@ namespace SayoOSD
                 { "ColTime", "Time" }, { "ColKey", "Key(Hex)" }, { "ColData", "Full Data" }, { "MnuCopy", "Copy" },
                 { "ChkPauseLog", "Pause Log" },
                 { "LblLayer", "Layer:" }, { "LblSlot", "Slot:" }, { "LblName", "Name:" }, { "BtnRename", "Rename" },
-                { "LblTarget", "Target:" }, { "TargetNone", "No Move" },
+                { "LblTarget", "Layer Move:" }, { "TargetNone", "No Move" },
                 { "LblSignal", "Selected Signal:" }, { "BtnAutoDetect", "Auto Detect" }, { "BtnUnmap", "Unmap" },
                 { "ChkEnableFileLog", "Save Log to File" }, { "ChkStartWithWindows", "Run on Startup" },
-                { "BtnSave", "Save Settings" }, { "BtnHide", "Hide to Tray" },
+                { "BtnSave", "Save Settings" }, { "BtnHide", "Hide to Tray" }, { "BtnOpenSettings", "Settings" },
                 { "MsgNameChanged", "Name changed." },
                 { "MsgSelectSlot", "Please select a slot to map." },
                 { "MsgDetecting", "Detecting..." },
@@ -226,10 +238,10 @@ namespace SayoOSD
                 { "ColTime", "Temps" }, { "ColKey", "Clé(Hex)" }, { "ColData", "Données" }, { "MnuCopy", "Copier" },
                 { "ChkPauseLog", "Pause Log" },
                 { "LblLayer", "Couche:" }, { "LblSlot", "Slot:" }, { "LblName", "Nom:" }, { "BtnRename", "Renommer" },
-                { "LblTarget", "Cible:" }, { "TargetNone", "Aucun" },
+                { "LblTarget", "Changer couche:" }, { "TargetNone", "Aucun" },
                 { "LblSignal", "Signal:" }, { "BtnAutoDetect", "Détection auto" }, { "BtnUnmap", "Démapper" },
                 { "ChkEnableFileLog", "Enreg. fichier" }, { "ChkStartWithWindows", "Démarrer avec Windows" },
-                { "BtnSave", "Enreg. paramètres" }, { "BtnHide", "Cacher" },
+                { "BtnSave", "Enreg. paramètres" }, { "BtnHide", "Cacher" }, { "BtnOpenSettings", "Paramètres" },
                 { "MsgNameChanged", "Nom changé." },
                 { "MsgSelectSlot", "Sélectionnez un slot." },
                 { "MsgDetecting", "Détection..." },
@@ -260,10 +272,10 @@ namespace SayoOSD
                 { "ColTime", "Tiempo" }, { "ColKey", "Clave(Hex)" }, { "ColData", "Datos" }, { "MnuCopy", "Copiar" },
                 { "ChkPauseLog", "Pausar registro" },
                 { "LblLayer", "Capa:" }, { "LblSlot", "Ranura:" }, { "LblName", "Nombre:" }, { "BtnRename", "Renombrar" },
-                { "LblTarget", "Destino:" }, { "TargetNone", "Ninguno" },
+                { "LblTarget", "Cambiar capa:" }, { "TargetNone", "Ninguno" },
                 { "LblSignal", "Señal:" }, { "BtnAutoDetect", "Detección auto" }, { "BtnUnmap", "Desasignar" },
                 { "ChkEnableFileLog", "Guardar registro" }, { "ChkStartWithWindows", "Iniciar con Windows" },
-                { "BtnSave", "Guardar config." }, { "BtnHide", "Ocultar" },
+                { "BtnSave", "Guardar config." }, { "BtnHide", "Ocultar" }, { "BtnOpenSettings", "Configuración" },
                 { "MsgNameChanged", "Nombre cambiado." },
                 { "MsgSelectSlot", "Seleccione una ranura." },
                 { "MsgDetecting", "Detectando..." },
@@ -294,10 +306,10 @@ namespace SayoOSD
                 { "ColTime", "时间" }, { "ColKey", "键值(Hex)" }, { "ColData", "数据" }, { "MnuCopy", "复制" },
                 { "ChkPauseLog", "暂停日志" },
                 { "LblLayer", "层:" }, { "LblSlot", "槽:" }, { "LblName", "名称:" }, { "BtnRename", "重命名" },
-                { "LblTarget", "目标:" }, { "TargetNone", "无" },
+                { "LblTarget", "层级移动:" }, { "TargetNone", "无" },
                 { "LblSignal", "信号:" }, { "BtnAutoDetect", "自动检测" }, { "BtnUnmap", "取消映射" },
                 { "ChkEnableFileLog", "保存日志文件" }, { "ChkStartWithWindows", "开机自启" },
-                { "BtnSave", "保存设置" }, { "BtnHide", "隐藏到托盘" },
+                { "BtnSave", "保存设置" }, { "BtnHide", "隐藏到托盘" }, { "BtnOpenSettings", "设置" },
                 { "MsgNameChanged", "名称已更改。" },
                 { "MsgSelectSlot", "请先选择一个槽位。" },
                 { "MsgDetecting", "检测中..." },
@@ -328,10 +340,10 @@ namespace SayoOSD
                 { "ColTime", "Zeit" }, { "ColKey", "Taste(Hex)" }, { "ColData", "Daten" }, { "MnuCopy", "Kopieren" },
                 { "ChkPauseLog", "Log pausieren" },
                 { "LblLayer", "Ebene:" }, { "LblSlot", "Slot:" }, { "LblName", "Name:" }, { "BtnRename", "Umbenennen" },
-                { "LblTarget", "Ziel:" }, { "TargetNone", "Keine" },
+                { "LblTarget", "Ebene wechseln:" }, { "TargetNone", "Keine" },
                 { "LblSignal", "Signal:" }, { "BtnAutoDetect", "Auto-Erkennung" }, { "BtnUnmap", "Löschen" },
                 { "ChkEnableFileLog", "Log speichern" }, { "ChkStartWithWindows", "Mit Windows starten" },
-                { "BtnSave", "Speichern" }, { "BtnHide", "In Tray minimieren" },
+                { "BtnSave", "Speichern" }, { "BtnHide", "In Tray minimieren" }, { "BtnOpenSettings", "Einstellungen" },
                 { "MsgNameChanged", "Name geändert." },
                 { "MsgSelectSlot", "Bitte Slot wählen." },
                 { "MsgDetecting", "Erkennen..." },

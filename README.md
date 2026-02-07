@@ -35,21 +35,29 @@ It detects button input signals and visually displays the current key and layer 
 ### How to Use
 
 1.  **Run**: Execute `SayoOSD.exe`.
-2.  **Connect Device**: Automatically finds SayoDevice (VID: 8089, PID: 000B). If not recognized, modify VID/PID in settings and click 'Scan'.
-3.  **Key Mapping**:
-    1.  **Preparation**: Select the **Layer** and **Slot (Key 1~12)** to map.
-    2.  **Set Name**: Enter the desired key name.
-    3.  **Layer Switch Setting (Important)**: If this button changes layers, select the **target layer (Fn 0 ~ Fn 4)** in the **'Target Layer'** combo box. This ensures the OSD automatically switches to that layer when pressed.
-    4.  **Detect & Register**: Click **[Auto Detect]** and press the key to register the signal. (Saved automatically.)
-    *   *Note: To rename an existing key, enter the name and click **[Rename]** to save.*
-4.  **Unmap**:
-    *   To reset a key, select the slot and click **[Unmap]**.
-5.  **Layer Settings**:
-    *   Select a layer from the top combo box to set names. Last used layer is saved on exit.
+2.  **Connect Device**: Click the **[Settings]** button to open the settings window. The program automatically finds the device. You can also manually enter VID/PID and click **[Apply]** in the settings window.
+3.  **Key Mapping & Renaming**:
+    1.  **Select Layer**: Choose the layer (Fn0 ~ Fn4) using the radio buttons at the top.
+    2.  **Select Key & Rename**: Click one of the **12 Key Slots (Text boxes)** in the center. Type the desired name directly and press **Enter** to save.
+    3.  **Register Signal**: Click **[Auto Detect]** and press the physical key.
+        *   **Example**: If the signal repeats (e.g., `63`) and then changes (e.g., `12` or others), **double-click the first log with the new value**. (Even if it's not `12`, select the first distinct log. This usually works).
+        ```text
+        21:11:36	63	... (Repeating)
+        21:11:36	12	... (Candidate Signal) <-- Double-click this!
+        21:11:36	-	...
+        ```
+    4.  **Layer Move**: If the key changes layers, select the target layer in the **'Layer Move'** combo box. (Keys with layer move are highlighted in light blue).
+    5.  **Unmap**: Select a slot and click **[Unmap]** to reset.
+4.  **OSD Settings**:
+    *   Click the **[Settings]** button. In the settings window, adjust Opacity, Timeout, and Mode (Auto/Always On/Off).
+    *   Check **Allow OSD Move** to drag the OSD window, or click **Reset Size** to restore defaults.
+5.  **Other**:
+    *   Click **[Settings]** for more options, or **[Hide to Tray]** to run in the background.
 
 ### Settings Save & Reset
 
 *   **Auto Save**: Settings are saved to `settings.json`.
+*   **Layer Synchronization**: The program cannot retrieve the device's current layer on startup. However, the active layer is saved to `settings.json` whenever it changes. On startup, the last saved layer is restored. If the device and OSD layers differ, pressing a mapped key will instantly switch the OSD to the correct layer.
 *   **Reset**: Delete `settings.json` and restart the program to reset.
 
 ### Disclaimer
@@ -95,22 +103,29 @@ SayoDevice 키패드 사용자를 위한 **비공식** OSD(On-Screen Display) �
 ## 사용 방법
 
 1.  **실행**: `SayoOSD.exe`를 실행합니다.
-2.  **장치 연결**: 프로그램이 자동으로 SayoDevice(VID: 8089, PID: 000B)를 찾습니다. 인식이 안 될 경우 설정에서 VID/PID를 수정하고 '검색'을 누르세요.
-3.  **키 매핑**:
-    1.  **준비**: 매핑할 **레이어**와 **슬롯(Key 1~12)**을 먼저 선택합니다.
-    2.  **이름 설정**: 원하는 키 이름을 입력합니다.
-    3.  **레이어 이동 설정 (중요)**: 만약 이 버튼이 **레이어를 변경하는 키**라면, **'이동'** 콤보박스에서 **전환될 레이어(Fn 0 ~ Fn 4)**를 선택해주세요. 이렇게 설정해야 키를 눌렀을 때 OSD도 해당 레이어로 자동 전환됩니다.
-    4.  **감지 및 등록**: **[자동 감지]** 버튼을 누르고 키패드를 눌러 신호를 등록합니다. (이때 자동으로 저장됩니다.)
-    *   *참고: 이미 등록된 키의 이름만 변경할 경우, 이름을 입력하고 **[이름변경]** 버튼을 눌러야 저장됩니다.*
-4.  **매핑 해제**:
-    *   잘못 등록된 키를 초기화하려면 슬롯을 선택하고 **[매핑해제]** 버튼을 누르세요.
-5.  **레이어 설정**:
-    *   프로그램 상단 콤보박스에서 레이어를 선택하여 각 레이어별 키 이름을 설정할 수 있습니다.
-    *   프로그램 종료 시 마지막으로 사용한 레이어 위치가 저장됩니다.
+2.  **장치 연결**: 메인 화면의 **[설정]** 버튼을 눌러 설정 창을 엽니다. 자동으로 장치를 찾으며, 필요 시 VID/PID를 직접 입력하고 **[적용]**을 누를 수 있습니다.
+3.  **키 매핑 및 이름 변경**:
+    1.  **레이어 선택**: 상단의 레이어 버튼(Fn0 ~ Fn4)을 눌러 편집할 레이어를 선택합니다.
+    2.  **키 선택 및 이름 변경**: 화면 중앙의 **12개 키 슬롯(텍스트 상자)** 중 하나를 클릭하여 선택합니다. 원하는 이름을 직접 입력하고 **Enter**를 누르면 저장됩니다.
+    3.  **신호 등록**: **[자동 감지]**를 누르고 키를 입력합니다.
+        *   **예시**: `63` 등이 반복되다가 `12` 등으로 변하거나 새로운 로그가 보이면, **변화된 첫 번째 로그**를 더블클릭하세요. (12가 나오지 않더라도, 변화가 감지된 첫 번째 로그를 등록하면 대부분 됩니다.)
+        ```text
+        21:11:36	63	... (반복)
+        21:11:36	12	... (Candidate Signal) <-- 이것을 더블클릭!
+        21:11:36	-	...
+        ```
+    4.  **레이어 이동 설정**: 해당 키가 레이어를 변경하는 키라면, **'레이어 이동'** 콤보박스에서 이동할 레이어를 선택하세요. (설정된 키는 연한 파란색으로 표시됩니다.)
+    5.  **매핑 해제**: 슬롯 선택 후 **[매핑해제]** 버튼을 누르면 초기화됩니다.
+4.  **OSD 설정**:
+    *   **[설정]** 버튼을 눌러 설정 창에서 투명도, 표시 시간, 표시 모드(자동/항상 켜기/끄기)를 조절할 수 있습니다.
+    *   **OSD 위치 이동 허용** 체크 후 드래그하여 위치를 변경하고, **크기 초기화** 버튼으로 되돌릴 수 있습니다.
+5.  **기타**:
+    *   **[설정]** 버튼을 눌러 추가 설정을 확인하거나, **[트레이로 숨기기]**를 통해 백그라운드로 전환합니다.
 
 ## 설정 저장 및 초기화
 
 *   **자동 저장**: 모든 설정(키 매핑, OSD 위치/크기, 레이어 정보 등)은 프로그램 실행 폴더 내의 `settings.json` 파일에 자동으로 저장됩니다.
+*   **레이어 동기화**: 프로그램 시작 시 기기의 현재 레이어 정보를 가져올 수 없어 즉시 동기화되지 않을 수 있습니다. 하지만 레이어 변경 시마다 설정 파일에 즉시 저장되어 다음 실행 시 복원되며, 기기와 OSD의 레이어가 다르더라도 키 입력 시 해당 레이어로 즉시 이동하여 동기화됩니다.
 *   **초기화**: 설정을 초기화하려면 프로그램을 종료한 후 `settings.json` 파일을 삭제하고 다시 실행하세요. 파일이 없으면 초기 상태로 시작됩니다.
 
 ## 주의사항 (Disclaimer)
@@ -157,21 +172,29 @@ Il détecte les signaux d'entrée des boutons et affiche visuellement la touche 
 ### Comment Utiliser
 
 1.  **Lancer** : Exécutez `SayoOSD.exe`.
-2.  **Connecter le Périphérique** : Trouve automatiquement SayoDevice (VID: 8089, PID: 000B). Si non reconnu, modifiez VID/PID dans les paramètres et cliquez sur 'Scanner'.
+2.  **Connecter le Périphérique** : Cliquez sur le bouton **[Paramètres]** pour ouvrir la fenêtre de configuration. Le programme trouve automatiquement le périphérique.
 3.  **Mappage des Touches** :
-    1.  **Préparation** : Sélectionnez la **Couche** et le **Slot (Touche 1~12)** à mapper.
-    2.  **Définir le Nom** : Entrez le nom de touche souhaité.
-    3.  **Réglage Changement de Couche (Important)** : Si ce bouton change de couche, sélectionnez la **couche cible (Fn 0 ~ Fn 4)** dans la liste déroulante **'Cible'**. Cela assure que l'OSD bascule automatiquement vers cette couche lorsqu'il est pressé.
-    4.  **Détecter & Enregistrer** : Cliquez sur **[Détection auto]** et appuyez sur la touche pour enregistrer le signal. (Sauvegardé automatiquement.)
-    *   *Note : Pour renommer une touche existante, entrez le nom et cliquez sur **[Renommer]** pour sauvegarder.*
-4.  **Démapper** :
-    *   Pour réinitialiser une touche, sélectionnez le slot et cliquez sur **[Démapper]**.
-5.  **Paramètres de Couche** :
-    *   Sélectionnez une couche dans la liste déroulante supérieure pour définir les noms. La dernière couche utilisée est sauvegardée à la sortie.
+    1.  **Sélectionner Couche** : Choisissez la couche (Fn0 ~ Fn4).
+    2.  **Sélectionner Touche & Renommer** : Cliquez sur l'un des **12 Slots (Boîtes de texte)**. Tapez le nom et appuyez sur **Entrée**.
+    3.  **Enregistrer Signal** : Cliquez sur **[Détection auto]** et appuyez sur la touche.
+        *   **Exemple** : Si le signal se répète (ex: `63`) puis change (ex: `12` ou autre), **double-cliquez sur la première ligne avec la nouvelle valeur**. (Même si ce n'est pas `12`, sélectionnez le premier journal distinct. Cela fonctionne généralement).
+        ```text
+        21:11:36	63	... (Répétition)
+        21:11:36	12	... (Candidate Signal) <-- Double-cliquez ici !
+        21:11:36	-	...
+        ```
+    4.  **Changer Couche** : Si la touche change de couche, sélectionnez la cible dans **'Changer couche'**. (Surligné en bleu clair).
+    5.  **Démapper** : Sélectionnez un slot et cliquez sur **[Démapper]**.
+4.  **Paramètres OSD** :
+    *   Cliquez sur **[Paramètres]**. Ajustez Opacité, Temps, Mode dans la fenêtre de configuration.
+    *   Cochez **Déplacer l'OSD** pour bouger la fenêtre.
+5.  **Autre** :
+    *   Cliquez sur **[Paramètres]** ou **[Cacher]**.
 
 ### Sauvegarde & Réinitialisation
 
 *   **Sauvegarde Auto** : Les paramètres sont sauvegardés dans `settings.json`.
+*   **Synchronisation des Couches** : Le programme ne peut pas récupérer la couche actuelle du périphérique au démarrage. Cependant, la couche active est enregistrée dans `settings.json` à chaque changement. Au démarrage, la dernière couche enregistrée est restaurée. Si les couches du périphérique et de l'OSD diffèrent, appuyer sur une touche mappée basculera instantanément l'OSD vers la bonne couche.
 *   **Réinitialiser** : Supprimez `settings.json` et redémarrez le programme pour réinitialiser.
 
 ### Avertissement
@@ -214,21 +237,29 @@ Detecta las señales de entrada de los botones y muestra visualmente la tecla ac
 ### Cómo Usar
 
 1.  **Ejecutar**: Ejecute `SayoOSD.exe`.
-2.  **Conectar Dispositivo**: Encuentra automáticamente SayoDevice (VID: 8089, PID: 000B). Si no se reconoce, modifique VID/PID en la configuración y haga clic en 'Escanear'.
+2.  **Conectar Dispositivo**: Haga clic en el botón **[Configuración]** para abrir la ventana de ajustes. El programa encuentra el dispositivo automáticamente.
 3.  **Mapeo de Teclas**:
-    1.  **Preparación**: Seleccione la **Capa** y la **Ranura (Tecla 1~12)** para mapear.
-    2.  **Establecer Nombre**: Ingrese el nombre de tecla deseado.
-    3.  **Configuración de Cambio de Capa (Importante)**: Si este botón cambia capas, seleccione la **capa destino (Fn 0 ~ Fn 4)** en el cuadro combinado **'Destino'**. Esto asegura que el OSD cambie automáticamente a esa capa cuando se presione.
-    4.  **Detectar y Registrar**: Haga clic en **[Detección auto]** y presione la tecla para registrar la señal. (Guardado automático.)
-    *   *Nota: Para renombrar una tecla existente, ingrese el nombre y haga clic en **[Renombrar]** para guardar.*
-4.  **Desasignar**:
-    *   Para restablecer una tecla, seleccione la ranura y haga clic en **[Desasignar]**.
-5.  **Configuración de Capa**:
-    *   Seleccione una capa del cuadro combinado superior para establecer nombres. La última capa utilizada se guarda al salir.
+    1.  **Seleccionar Capa**: Elija la capa (Fn0 ~ Fn4).
+    2.  **Seleccionar Tecla y Renombrar**: Haga clic en una de las **12 Ranuras (Cuadros de texto)**. Escriba el nombre y presione **Enter**.
+    3.  **Registrar Señal**: Haga clic en **[Detección auto]** y presione la tecla.
+        *   **Ejemplo**: Si el valor se repite (ej. `63`) y luego cambia (ej. `12` u otro), **haga doble clic en la primera línea con el nuevo valor**. (Incluso si no es `12`, seleccione el primer registro distinto. Esto generalmente funciona).
+        ```text
+        21:11:36	63	... (Repetición)
+        21:11:36	12	... (Candidate Signal) <-- ¡Doble clic aquí!
+        21:11:36	-	...
+        ```
+    4.  **Cambio de Capa**: Si la tecla cambia de capa, seleccione el destino en **'Cambiar capa'**. (Resaltado en azul claro).
+    5.  **Desasignar**: Seleccione una ranura y haga clic en **[Desasignar]**.
+4.  **Configuración OSD**:
+    *   Haga clic en **[Configuración]**. Ajuste Opacidad, Tiempo, Modo en la ventana de ajustes.
+    *   Marque **Mover OSD** para arrastrar la ventana.
+5.  **Otro**:
+    *   Haga clic en **[Configuración]** o **[Ocultar]**.
 
 ### Guardar y Restablecer Configuración
 
 *   **Guardado Auto**: La configuración se guarda en `settings.json`.
+*   **Sincronización de Capas**: El programa no puede recuperar la capa actual del dispositivo al inicio. Sin embargo, la capa activa se guarda en `settings.json` cada vez que cambia. Al inicio, se restaura la última capa guardada. Si las capas del dispositivo y del OSD difieren, presionar una tecla asignada cambiará instantáneamente el OSD a la capa correcta.
 *   **Restablecer**: Elimine `settings.json` y reinicie el programa para restablecer.
 
 ### Descargo de Responsabilidad
@@ -271,21 +302,29 @@ Este proyecto sigue la **Licencia MIT**.
 ### 使用方法
 
 1.  **运行**：执行 `SayoOSD.exe`。
-2.  **连接设备**：自动查找 SayoDevice (VID: 8089, PID: 000B)。如果未识别，请在设置中修改 VID/PID 并点击“扫描”。
-3.  **按键映射**：
-    1.  **准备**：选择要映射的**层**和**槽位 (键 1~12)**。
-    2.  **设置名称**：输入所需的按键名称。
-    3.  **层切换设置（重要）**：如果此按钮用于切换层级，请在**“目标”**下拉框中选择**目标层 (Fn 0 ~ Fn 4)**。这确保按下时 OSD 自动切换到该层。
-    4.  **检测并注册**：点击**[自动检测]**并按下按键以注册信号。（自动保存。）
-    *   *注意：要重命名现有按键，请输入名称并点击**[重命名]**以保存。*
-4.  **取消映射**：
-    *   要重置按键，请选择槽位并点击**[取消映射]**。
-5.  **层设置**：
-    *   从顶部下拉框选择层以设置名称。退出时保存最后使用的层。
+2.  **连接设备**：点击**[设置]**按钮打开设置窗口。程序会自动查找设备。您也可以手动输入 VID/PID 并点击**[应用]**。
+3.  **按键映射与重命名**：
+    1.  **选择层**：使用顶部的单选按钮选择层 (Fn0 ~ Fn4)。
+    2.  **选择按键并重命名**：点击中间的 **12 个按键槽（文本框）**之一。直接输入名称并按 **Enter** 保存。
+    3.  **注册信号**：点击**[自动检测]**并按下按键。
+        *   **示例**：如果数值重复（如 `63`）然后发生变化（如 `12` 或其他），请**双击变化后的第一条日志**。（即使不是 `12`，选择出现的第一个不同日志通常也能成功）。
+        ```text
+        21:11:36	63	... (重复)
+        21:11:36	12	... (Candidate Signal) <-- 双击这里！
+        21:11:36	-	...
+        ```
+    4.  **层级移动**：如果按键用于切换层，请在**“层级移动”**中选择目标层。（显示为浅蓝色）。
+    5.  **取消映射**：选择槽位并点击**[取消映射]**。
+4.  **OSD 设置**：
+    *   点击**[设置]**按钮。在设置窗口中调整透明度、时间和模式。
+    *   勾选**允许移动 OSD** 以拖动窗口，或点击**重置大小**。
+5.  **其他**：
+    *   点击**[设置]**查看更多选项，或点击**[隐藏到托盘]**。
 
 ### 设置保存与重置
 
 *   **自动保存**：设置保存到 `settings.json`。
+*   **层级同步**：程序启动时无法获取设备的当前层级信息。但是，每当层级发生变化时，都会立即保存到 `settings.json` 中。下次启动时将恢复上次保存的层级。即使设备和 OSD 的层级不同，按下按键也会立即切换到相应的层级。
 *   **重置**：删除 `settings.json` 并重启程序以重置。
 
 ### 免责声明
@@ -328,21 +367,29 @@ Es erkennt Tasteneingabesignale und zeigt die aktuelle Taste und Ebeneninformati
 ### Verwendung
 
 1.  **Ausführen**: Starten Sie `SayoOSD.exe`.
-2.  **Gerät verbinden**: Findet automatisch SayoDevice (VID: 8089, PID: 000B). Falls nicht erkannt, ändern Sie VID/PID in den Einstellungen und klicken Sie auf 'Scannen'.
+2.  **Gerät verbinden**: Klicken Sie auf die Schaltfläche **[Einstellungen]**, um das Einstellungsfenster zu öffnen. Das Programm findet das Gerät automatisch.
 3.  **Tastenbelegung**:
-    1.  **Vorbereitung**: Wählen Sie die **Ebene** und den **Slot (Taste 1~12)** zum Zuordnen.
-    2.  **Name festlegen**: Geben Sie den gewünschten Tastennamen ein.
-    3.  **Ebenenwechsel-Einstellung (Wichtig)**: Wenn diese Taste die Ebene wechselt, wählen Sie die **Zielebene (Fn 0 ~ Fn 4)** im Kombinationsfeld **'Ziel'**. Dies stellt sicher, dass das OSD beim Drücken automatisch zu dieser Ebene wechselt.
-    4.  **Erkennen & Registrieren**: Klicken Sie auf **[Auto-Erkennung]** und drücken Sie die Taste, um das Signal zu registrieren. (Automatisch gespeichert.)
-    *   *Hinweis: Um eine vorhandene Taste umzubenennen, geben Sie den Namen ein und klicken Sie auf **[Umbenennen]**, um zu speichern.*
-4.  **Löschen**:
-    *   Um eine Taste zurückzusetzen, wählen Sie den Slot und klicken Sie auf **[Löschen]**.
-5.  **Ebeneneinstellungen**:
-    *   Wählen Sie eine Ebene aus dem oberen Kombinationsfeld, um Namen festzulegen. Die zuletzt verwendete Ebene wird beim Beenden gespeichert.
+    1.  **Ebene wählen**: Wählen Sie die Ebene (Fn0 ~ Fn4).
+    2.  **Taste wählen & Umbenennen**: Klicken Sie auf einen der **12 Slots (Textfelder)**. Namen eingeben und **Enter** drücken.
+    3.  **Signal registrieren**: Klicken Sie auf **[Auto-Erkennung]** und drücken Sie die Taste.
+        *   **Beispiel**: Wenn sich der Wert wiederholt (z. B. `63`) und dann ändert (z. B. `12` oder andere), **doppelklicken Sie auf den ersten Eintrag mit dem neuen Wert**. (Auch wenn es nicht `12` ist, wählen Sie den ersten abweichenden Eintrag. Das funktioniert meistens).
+        ```text
+        21:11:36	63	... (Wiederholung)
+        21:11:36	12	... (Candidate Signal) <-- Hier doppelklicken!
+        21:11:36	-	...
+        ```
+    4.  **Ebene wechseln**: Wenn die Taste die Ebene wechselt, wählen Sie das Ziel unter **'Ebene wechseln'**. (Hellblau hervorgehoben).
+    5.  **Löschen**: Slot wählen und auf **[Löschen]** klicken.
+4.  **OSD-Einstellungen**:
+    *   Klicken Sie auf **[Einstellungen]**. Passen Sie Deckkraft, Zeit und Modus im Einstellungsfenster an.
+    *   Aktivieren Sie **OSD verschieben**, um das Fenster zu ziehen.
+5.  **Sonstiges**:
+    *   Klicken Sie auf **[Einstellungen]** oder **[In Tray minimieren]**.
 
 ### Einstellungen speichern & zurücksetzen
 
 *   **Auto-Speichern**: Einstellungen werden in `settings.json` gespeichert.
+*   **Ebenen-Synchronisation**: Das Programm kann beim Start nicht die aktuelle Ebene des Geräts abrufen. Die aktive Ebene wird jedoch bei jeder Änderung in `settings.json` gespeichert. Beim Start wird die zuletzt gespeicherte Ebene wiederhergestellt. Wenn sich die Ebenen von Gerät und OSD unterscheiden, wechselt das OSD beim Drücken einer zugeordneten Taste sofort zur korrekten Ebene.
 *   **Zurücksetzen**: Löschen Sie `settings.json` und starten Sie das Programm neu, um es zurückzusetzen.
 
 ### Haftungsausschluss
