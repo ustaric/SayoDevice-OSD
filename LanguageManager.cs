@@ -40,10 +40,18 @@ namespace SayoOSD
             "GrpMap", "ColTime", "ColKey", "ColData", "MnuCopy",
             "ChkPauseLog", "LblLayer", "LblSlot", "LblName", "BtnRename",
             "LblTarget", "TargetNone", "LblSignal", "BtnAutoDetect", "BtnUnmap",
+            "ActionRun",
+            "ActionTextMacro", "ActionAudioCycle",
+            "TitleInputText", "MsgEnterText",
+            "CtxDeleteMacro", "TitleDeleteMacro", "MsgDeleteMacroConfirm",
+            "HeaderMedia", "ActionMediaPlayPause", "ActionMediaNext", "ActionMediaPrev",
+            "ActionVolUp", "ActionVolDown", "ActionVolMute",
+            "HeaderLayerMove",
             "ChkEnableFileLog", "ChkStartWithWindows", "BtnSave", "BtnHide",
             "BtnOpenSettings", "MsgNameChanged", "MsgSelectSlot", "MsgDetecting", "MsgSelectSignal",
             "MsgUnmapConfirm", "MsgUnmapped", "MsgPatternMapped", "MsgVidApplied", "MsgSettingsSaved",
-            "TitleSelectSignal", "TitleUnmap"
+            "TitleSelectSignal", "TitleUnmap",
+            "BtnLicense", "TitleLicense", "LicenseText"
         };
 
         public static void Load()
@@ -90,15 +98,15 @@ namespace SayoOSD
                                 existingLang.Strings[kv.Key] = kv.Value;
                                 changed = true;
                             }
-                            // [수정] "LblTarget" 키의 값이 구버전(단순 이동/Target)일 경우 "레이어 이동"으로 강제 업데이트
+                            // [수정] "LblTarget" 키의 값이 구버전(이동/Target/Action)일 경우 "기능"으로 강제 업데이트
                             else if (kv.Key == "LblTarget")
                             {
-                                bool update = (existingLang.Code == "KO" && existingLang.Strings[kv.Key] == "이동:") ||
-                                              (existingLang.Code == "EN" && existingLang.Strings[kv.Key] == "Target:") ||
-                                              (existingLang.Code == "FR" && existingLang.Strings[kv.Key] == "Cible:") ||
-                                              (existingLang.Code == "ES" && existingLang.Strings[kv.Key] == "Destino:") ||
-                                              (existingLang.Code == "CN" && existingLang.Strings[kv.Key] == "目标:") ||
-                                              (existingLang.Code == "DE" && existingLang.Strings[kv.Key] == "Ziel:");
+                                bool update = (existingLang.Code == "KO" && (existingLang.Strings[kv.Key] == "이동:" || existingLang.Strings[kv.Key] == "동작:")) ||
+                                              (existingLang.Code == "EN" && (existingLang.Strings[kv.Key] == "Target:" || existingLang.Strings[kv.Key] == "Action:")) ||
+                                              (existingLang.Code == "FR" && (existingLang.Strings[kv.Key] == "Cible:" || existingLang.Strings[kv.Key] == "Action:")) ||
+                                              (existingLang.Code == "ES" && (existingLang.Strings[kv.Key] == "Destino:" || existingLang.Strings[kv.Key] == "Acción:")) ||
+                                              (existingLang.Code == "CN" && (existingLang.Strings[kv.Key] == "目标:" || existingLang.Strings[kv.Key] == "动作:")) ||
+                                              (existingLang.Code == "DE" && (existingLang.Strings[kv.Key] == "Ziel:" || existingLang.Strings[kv.Key] == "Aktion:"));
                                 
                                 if (update) { existingLang.Strings[kv.Key] = kv.Value; changed = true; }
                             }
@@ -150,6 +158,17 @@ namespace SayoOSD
             return key;
         }
 
+        // NAudio 라이선스 전문 (공통 사용)
+        private const string NAudioLicense = 
+@"NAudio 2.2.1
+Copyright 2020 Mark Heath
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the ""Software""), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED ""AS IS"", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.";
+
         private static LocalizationData GetDefaultData()
         {
             var data = new LocalizationData();
@@ -170,7 +189,15 @@ namespace SayoOSD
                 { "ColTime", "시간" }, { "ColKey", "키값(Hex)" }, { "ColData", "전체 데이터" }, { "MnuCopy", "복사" },
                 { "ChkPauseLog", "로그 일시정지" },
                 { "LblLayer", "레이어:" }, { "LblSlot", "슬롯:" }, { "LblName", "이름:" }, { "BtnRename", "이름변경" },
-                { "LblTarget", "레이어 이동:" }, { "TargetNone", "이동 없음" },
+                { "LblTarget", "기능:" }, { "TargetNone", "기능 없음" },
+                { "ActionRun", "프로그램 연결..." },
+                { "ActionTextMacro", "텍스트 매크로 (자동 입력)" }, { "ActionAudioCycle", "오디오 장치 전환 (순차)" },
+                { "TitleInputText", "텍스트 매크로 입력" }, { "MsgEnterText", "매크로로 입력할 텍스트를 입력하세요.\n(예: 안녕하세요{ENTER})" },
+                { "CtxDeleteMacro", "상용구 삭제 (모든 키에서 해제)" }, { "TitleDeleteMacro", "상용구 삭제" }, { "MsgDeleteMacroConfirm", "'{0}' 상용구를 삭제하시겠습니까?\n이 상용구를 사용하는 모든 키의 매핑이 해제됩니다." },
+                { "HeaderMedia", "미디어 제어" },
+                { "ActionMediaPlayPause", "재생 / 일시정지" }, { "ActionMediaNext", "다음 곡" }, { "ActionMediaPrev", "이전 곡" },
+                { "ActionVolUp", "볼륨 증가" }, { "ActionVolDown", "볼륨 감소" }, { "ActionVolMute", "음소거 (시스템)" },
+                { "HeaderLayerMove", "레이어 이동 선택" },
                 { "LblSignal", "선택한 신호:" }, { "BtnAutoDetect", "자동 감지" }, { "BtnUnmap", "매핑해제" },
                 { "ChkEnableFileLog", "로그 파일 저장" }, { "ChkStartWithWindows", "윈도우 시작 시 자동 실행" },
                 { "BtnSave", "설정 저장" }, { "BtnHide", "트레이로 숨기기" }, { "BtnOpenSettings", "설정" },
@@ -184,7 +211,10 @@ namespace SayoOSD
                 { "MsgVidApplied", "VID/PID가 적용되었습니다." },
                 { "MsgSettingsSaved", "설정이 저장되었습니다." },
                 { "TitleSelectSignal", "신호 선택 (키를 누르세요)" },
-                { "TitleUnmap", "매핑 해제" }
+                { "TitleUnmap", "매핑 해제" },
+                { "BtnLicense", "NAudio 오픈소스 라이선스" },
+                { "TitleLicense", "오픈소스 라이선스 정보" },
+                { "LicenseText", NAudioLicense }
             };
             data.Languages.Add(ko);
 
@@ -204,7 +234,15 @@ namespace SayoOSD
                 { "ColTime", "Time" }, { "ColKey", "Key(Hex)" }, { "ColData", "Full Data" }, { "MnuCopy", "Copy" },
                 { "ChkPauseLog", "Pause Log" },
                 { "LblLayer", "Layer:" }, { "LblSlot", "Slot:" }, { "LblName", "Name:" }, { "BtnRename", "Rename" },
-                { "LblTarget", "Layer Move:" }, { "TargetNone", "No Move" },
+                { "LblTarget", "Function:" }, { "TargetNone", "None" },
+                { "ActionRun", "Run Program..." },
+                { "ActionTextMacro", "Text Macro (Auto Input)" }, { "ActionAudioCycle", "Audio Device Cycle" },
+                { "TitleInputText", "Input Text Macro" }, { "MsgEnterText", "Enter text for macro.\n(e.g. Hello{ENTER})" },
+                { "CtxDeleteMacro", "Delete Macro (Unmap all)" }, { "TitleDeleteMacro", "Delete Macro" }, { "MsgDeleteMacroConfirm", "Delete macro '{0}'?\nThis will unmap it from all keys." },
+                { "HeaderMedia", "Media Control" },
+                { "ActionMediaPlayPause", "Play / Pause" }, { "ActionMediaNext", "Next Track" }, { "ActionMediaPrev", "Prev Track" },
+                { "ActionVolUp", "Volume Up" }, { "ActionVolDown", "Volume Down" }, { "ActionVolMute", "Mute (System)" },
+                { "HeaderLayerMove", "Select Layer" },
                 { "LblSignal", "Selected Signal:" }, { "BtnAutoDetect", "Auto Detect" }, { "BtnUnmap", "Unmap" },
                 { "ChkEnableFileLog", "Save Log to File" }, { "ChkStartWithWindows", "Run on Startup" },
                 { "BtnSave", "Save Settings" }, { "BtnHide", "Hide to Tray" }, { "BtnOpenSettings", "Settings" },
@@ -218,7 +256,10 @@ namespace SayoOSD
                 { "MsgVidApplied", "VID/PID Applied." },
                 { "MsgSettingsSaved", "Settings saved." },
                 { "TitleSelectSignal", "Select Signal (Press Key)" },
-                { "TitleUnmap", "Unmap" }
+                { "TitleUnmap", "Unmap" },
+                { "BtnLicense", "NAudio Open Source License" },
+                { "TitleLicense", "Open Source Licenses" },
+                { "LicenseText", NAudioLicense }
             };
             data.Languages.Add(en);
 
@@ -238,7 +279,9 @@ namespace SayoOSD
                 { "ColTime", "Temps" }, { "ColKey", "Clé(Hex)" }, { "ColData", "Données" }, { "MnuCopy", "Copier" },
                 { "ChkPauseLog", "Pause Log" },
                 { "LblLayer", "Couche:" }, { "LblSlot", "Slot:" }, { "LblName", "Nom:" }, { "BtnRename", "Renommer" },
-                { "LblTarget", "Changer couche:" }, { "TargetNone", "Aucun" },
+                { "LblTarget", "Fonction:" }, { "TargetNone", "Aucun" },
+                { "ActionRun", "Lancer le programme..." },
+                { "HeaderLayerMove", "Choisir la couche" },
                 { "LblSignal", "Signal:" }, { "BtnAutoDetect", "Détection auto" }, { "BtnUnmap", "Démapper" },
                 { "ChkEnableFileLog", "Enreg. fichier" }, { "ChkStartWithWindows", "Démarrer avec Windows" },
                 { "BtnSave", "Enreg. paramètres" }, { "BtnHide", "Cacher" }, { "BtnOpenSettings", "Paramètres" },
@@ -252,7 +295,10 @@ namespace SayoOSD
                 { "MsgVidApplied", "VID/PID Appliqué." },
                 { "MsgSettingsSaved", "Paramètres enregistrés." },
                 { "TitleSelectSignal", "Sélectionner le signal" },
-                { "TitleUnmap", "Démapper" }
+                { "TitleUnmap", "Démapper" },
+                { "BtnLicense", "Licence Open Source NAudio" },
+                { "TitleLicense", "Licences Open Source" },
+                { "LicenseText", NAudioLicense }
             };
             data.Languages.Add(fr);
 
@@ -272,7 +318,9 @@ namespace SayoOSD
                 { "ColTime", "Tiempo" }, { "ColKey", "Clave(Hex)" }, { "ColData", "Datos" }, { "MnuCopy", "Copiar" },
                 { "ChkPauseLog", "Pausar registro" },
                 { "LblLayer", "Capa:" }, { "LblSlot", "Ranura:" }, { "LblName", "Nombre:" }, { "BtnRename", "Renombrar" },
-                { "LblTarget", "Cambiar capa:" }, { "TargetNone", "Ninguno" },
+                { "LblTarget", "Función:" }, { "TargetNone", "Ninguno" },
+                { "ActionRun", "Ejecutar programa..." },
+                { "HeaderLayerMove", "Seleccionar capa" },
                 { "LblSignal", "Señal:" }, { "BtnAutoDetect", "Detección auto" }, { "BtnUnmap", "Desasignar" },
                 { "ChkEnableFileLog", "Guardar registro" }, { "ChkStartWithWindows", "Iniciar con Windows" },
                 { "BtnSave", "Guardar config." }, { "BtnHide", "Ocultar" }, { "BtnOpenSettings", "Configuración" },
@@ -286,7 +334,10 @@ namespace SayoOSD
                 { "MsgVidApplied", "VID/PID Aplicado." },
                 { "MsgSettingsSaved", "Configuración guardada." },
                 { "TitleSelectSignal", "Seleccionar señal" },
-                { "TitleUnmap", "Desasignar" }
+                { "TitleUnmap", "Desasignar" },
+                { "BtnLicense", "Licencia de código abierto NAudio" },
+                { "TitleLicense", "Licencias de código abierto" },
+                { "LicenseText", NAudioLicense }
             };
             data.Languages.Add(es);
 
@@ -306,7 +357,9 @@ namespace SayoOSD
                 { "ColTime", "时间" }, { "ColKey", "键值(Hex)" }, { "ColData", "数据" }, { "MnuCopy", "复制" },
                 { "ChkPauseLog", "暂停日志" },
                 { "LblLayer", "层:" }, { "LblSlot", "槽:" }, { "LblName", "名称:" }, { "BtnRename", "重命名" },
-                { "LblTarget", "层级移动:" }, { "TargetNone", "无" },
+                { "LblTarget", "功能:" }, { "TargetNone", "无" },
+                { "ActionRun", "运行程序..." },
+                { "HeaderLayerMove", "选择层级" },
                 { "LblSignal", "信号:" }, { "BtnAutoDetect", "自动检测" }, { "BtnUnmap", "取消映射" },
                 { "ChkEnableFileLog", "保存日志文件" }, { "ChkStartWithWindows", "开机自启" },
                 { "BtnSave", "保存设置" }, { "BtnHide", "隐藏到托盘" }, { "BtnOpenSettings", "设置" },
@@ -320,7 +373,10 @@ namespace SayoOSD
                 { "MsgVidApplied", "VID/PID 已应用。" },
                 { "MsgSettingsSaved", "设置已保存。" },
                 { "TitleSelectSignal", "选择信号 (按键)" },
-                { "TitleUnmap", "取消映射" }
+                { "TitleUnmap", "取消映射" },
+                { "BtnLicense", "NAudio 开源许可证" },
+                { "TitleLicense", "开源许可证" },
+                { "LicenseText", NAudioLicense }
             };
             data.Languages.Add(cn);
 
@@ -340,7 +396,9 @@ namespace SayoOSD
                 { "ColTime", "Zeit" }, { "ColKey", "Taste(Hex)" }, { "ColData", "Daten" }, { "MnuCopy", "Kopieren" },
                 { "ChkPauseLog", "Log pausieren" },
                 { "LblLayer", "Ebene:" }, { "LblSlot", "Slot:" }, { "LblName", "Name:" }, { "BtnRename", "Umbenennen" },
-                { "LblTarget", "Ebene wechseln:" }, { "TargetNone", "Keine" },
+                { "LblTarget", "Funktion:" }, { "TargetNone", "Keine" },
+                { "ActionRun", "Programm ausführen..." },
+                { "HeaderLayerMove", "Ebene wählen" },
                 { "LblSignal", "Signal:" }, { "BtnAutoDetect", "Auto-Erkennung" }, { "BtnUnmap", "Löschen" },
                 { "ChkEnableFileLog", "Log speichern" }, { "ChkStartWithWindows", "Mit Windows starten" },
                 { "BtnSave", "Speichern" }, { "BtnHide", "In Tray minimieren" }, { "BtnOpenSettings", "Einstellungen" },
@@ -354,7 +412,10 @@ namespace SayoOSD
                 { "MsgVidApplied", "VID/PID angewendet." },
                 { "MsgSettingsSaved", "Gespeichert." },
                 { "TitleSelectSignal", "Signal wählen" },
-                { "TitleUnmap", "Löschen" }
+                { "TitleUnmap", "Löschen" },
+                { "BtnLicense", "NAudio Open-Source-Lizenz" },
+                { "TitleLicense", "Open-Source-Lizenzen" },
+                { "LicenseText", NAudioLicense }
             };
             data.Languages.Add(de);
 

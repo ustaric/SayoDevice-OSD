@@ -9,9 +9,10 @@ namespace SayoOSD
     {
         public int Index { get; set; } // 1 ~ 12
         public int Layer { get; set; } = 0; // 0 ~ 4 (Fn0 ~ Fn4)
-        public int TargetLayer { get; set; } = -1; // -1: 이동 없음, 0~4: 해당 레이어로 이동
+        public int TargetLayer { get; set; } = -1; // -1: 이동 없음, 0~4: 레이어 이동, 99: 마이크 음소거
         public string Name { get; set; } = "Button";
         public string TriggerPattern { get; set; } // 매핑된 신호 패턴 (Hex String)
+        public string ProgramPath { get; set; } // 실행할 프로그램 경로
     }
 
     public class AppSettings

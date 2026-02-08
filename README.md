@@ -72,6 +72,11 @@ It detects button input signals and visually displays the current key and layer 
 
 This project follows the **MIT License**.
 
+**Third Party Licenses:**
+*   **NAudio** (v2.2.1) - Copyright 2020 Mark Heath (MIT License)
+    *   License: https://www.nuget.org/packages/NAudio/2.2.1/License
+    *   See [Settings] > [Open Source Licenses] in the app for details.
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ---
@@ -141,6 +146,11 @@ SayoDevice 키패드 사용자를 위한 **비공식** OSD(On-Screen Display) �
 
 이 프로젝트는 **MIT 라이선스**를 따릅니다. 자유롭게 수정하고 배포하셔도 됩니다.
 
+**오픈소스 라이선스 고지:**
+*   **NAudio** (v2.2.1) - Copyright 2020 Mark Heath (MIT License)
+    *   라이선스: https://www.nuget.org/packages/NAudio/2.2.1/License
+    *   앱 내 [설정] > [오픈소스 라이선스] 메뉴에서 전문을 확인할 수 있습니다.
+
 <p align="right">(<a href="#readme-top">맨 위로</a>)</p>
 
 ---
@@ -205,6 +215,11 @@ Il détecte les signaux d'entrée des boutons et affiche visuellement la touche 
 ### Licence
 
 Ce projet suit la **Licence MIT**.
+
+**Licences tierces:**
+*   **NAudio** (v2.2.1) - Copyright 2020 Mark Heath (MIT License)
+    *   Licence: https://www.nuget.org/packages/NAudio/2.2.1/License
+    *   Voir [Paramètres] > [Licences Open Source] dans l'application pour plus de détails.
 
 <p align="right">(<a href="#readme-top">Haut de page</a>)</p>
 
@@ -271,6 +286,11 @@ Detecta las señales de entrada de los botones y muestra visualmente la tecla ac
 
 Este proyecto sigue la **Licencia MIT**.
 
+**Licencias de terceros:**
+*   **NAudio** (v2.2.1) - Copyright 2020 Mark Heath (MIT License)
+    *   Licencia: https://www.nuget.org/packages/NAudio/2.2.1/License
+    *   Consulte [Configuración] > [Licencias de código abierto] en la aplicación para obtener más detalles.
+
 <p align="right">(<a href="#readme-top">Volver arriba</a>)</p>
 
 ---
@@ -336,6 +356,11 @@ Este proyecto sigue la **Licencia MIT**.
 
 本项目遵循 **MIT 许可证**。
 
+**第三方许可:**
+*   **NAudio** (v2.2.1) - Copyright 2020 Mark Heath (MIT License)
+    *   许可证: https://www.nuget.org/packages/NAudio/2.2.1/License
+    *   有关详细信息，请参阅应用程序中的[设置] > [开源许可证]。
+
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
 ---
@@ -400,6 +425,11 @@ Es erkennt Tasteneingabesignale und zeigt die aktuelle Taste und Ebeneninformati
 ### Lizenz
 
 Dieses Projekt folgt der **MIT-Lizenz**.
+
+**Lizenzen von Drittanbietern:**
+*   **NAudio** (v2.2.1) - Copyright 2020 Mark Heath (MIT License)
+    *   Lizenz: https://www.nuget.org/packages/NAudio/2.2.1/License
+    *   Siehe [Einstellungen] > [Open-Source-Lizenzen] in der App für Details.
 
 <p align="right">(<a href="#readme-top">Nach oben</a>)</p>
 

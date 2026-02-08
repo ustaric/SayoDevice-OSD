@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -19,6 +19,9 @@ namespace SayoOSD
         private int _osdMode = 0; // 0: Auto, 1: AlwaysOn, 2: AlwaysOff
         private double _aspectRatio = 0; // 가로세로 비율 저장
         private AppSettings _currentSettings; // 현재 설정 참조
+        private int _currentLayer = 0; // 현재 레이어
+        private bool? _isMicMuted = null; // 마이크 상태
+        private bool? _isSpeakerMuted = null; // 스피커 상태
         public event Action<string> DebugLog; // 로그 전달 이벤트
 
         public OsdWindow()
@@ -83,6 +86,9 @@ namespace SayoOSD
         {
             _holdTimer.Stop();
             
+            // 하이라이트(노란 테두리) 제거 및 상태 색상 복구 (공통)
+            RefreshAllSlotsBackground();
+
             if (_osdMode == 0) // 자동 모드: 창 페이드 아웃
             {
                 DebugLog?.Invoke($"[OSD] HoldTimer_Tick: 0.5초 대기 종료. 페이드 아웃 시작. (Current Opacity: {this.Opacity})");
@@ -108,14 +114,6 @@ namespace SayoOSD
             else if (_osdMode == 1) // 항상 켜기: 하이라이트만 끄기
             {
                 DebugLog?.Invoke("[OSD] Always On: 하이라이트 초기화");
-                foreach (var slot in _slots)
-                {
-                    slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)); // 반투명 복구
-                    byte bgAlpha = _currentSettings != null ? (byte)_currentSettings.OsdBackgroundAlpha : (byte)50;
-                    slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(bgAlpha, 0xFF, 0xFF, 0xFF)); // 설정된 배경 농도 복구
-                    slot.BorderBrush = System.Windows.Media.Brushes.Transparent;
-                    slot.BorderThickness = new Thickness(0);
-                }
             }
         }
 
@@ -186,13 +184,7 @@ namespace SayoOSD
                 _timer.Interval = TimeSpan.FromSeconds(settings.OsdTimeout);
 
             // 배경색 즉시 적용 (설정 변경 시 미리보기)
-            byte bgAlpha = (byte)settings.OsdBackgroundAlpha;
-            foreach (var slot in _slots)
-            {
-                // 모든 슬롯을 설정된 배경색으로 초기화
-                slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(bgAlpha, 0xFF, 0xFF, 0xFF));
-                slot.BorderThickness = new Thickness(0);
-            }
+            RefreshAllSlotsBackground();
 
             UpdateNames(settings.Buttons, settings.LastLayerIndex); // 저장된 마지막 레이어 표시
 
@@ -210,6 +202,7 @@ namespace SayoOSD
 
         public void UpdateNames(List<ButtonConfig> configs, int layer)
         {
+            _currentLayer = layer;
             foreach (var cfg in configs)
             {
                 if (cfg.Layer == layer && cfg.Index >= 1 && cfg.Index <= 12)
@@ -217,9 +210,69 @@ namespace SayoOSD
                     _texts[cfg.Index - 1].Text = cfg.Name;
                 }
             }
+            RefreshAllSlotsBackground();
         }
 
-        public void HighlightKey(int keyIndex)
+        public void SetMicState(bool isMuted)
+        {
+            _isMicMuted = isMuted;
+            RefreshAllSlotsBackground();
+        }
+
+        public void SetSpeakerState(bool isMuted)
+        {
+            _isSpeakerMuted = isMuted;
+            RefreshAllSlotsBackground();
+        }
+
+        private void RefreshAllSlotsBackground()
+        {
+            for (int i = 1; i <= 12; i++) UpdateSlotBackground(i);
+        }
+
+        private void UpdateSlotBackground(int keyIndex)
+        {
+            if (keyIndex < 1 || keyIndex > 12) return;
+            var slot = _slots[keyIndex - 1];
+
+            bool isMicKey = false;
+            bool isSpeakerKey = false;
+            if (_currentSettings != null)
+            {
+                var btn = _currentSettings.Buttons.Find(b => b.Layer == _currentLayer && b.Index == keyIndex);
+                if (btn != null)
+                {
+                    if (btn.TargetLayer == 99) isMicKey = true;
+                    if (btn.TargetLayer == 106 || btn.TargetLayer == 202) isSpeakerKey = true; // 106: Mute, 202: Audio Cycle
+                }
+            }
+
+            if (isMicKey && _isMicMuted.HasValue)
+            {
+                // 마이크 상태 표시 (Muted: 옅은 빨강, Unmuted: 옅은 초록)
+                if (_isMicMuted.Value)
+                    slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x66, 0xFF, 0x00, 0x00));
+                else
+                    slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x66, 0x00, 0xFF, 0x00));
+            }
+            else if (isSpeakerKey && _isSpeakerMuted.HasValue)
+            {
+                // 스피커 상태 표시 (Muted: 주황, Unmuted: 하늘색)
+                if (_isSpeakerMuted.Value)
+                    slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x66, 0xFF, 0x45, 0x00));
+                else
+                    slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x66, 0x00, 0xBF, 0xFF));
+            }
+            else
+            {
+                byte bgAlpha = _currentSettings != null ? (byte)_currentSettings.OsdBackgroundAlpha : (byte)50;
+                slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(bgAlpha, 0xFF, 0xFF, 0xFF));
+            }
+            slot.BorderBrush = System.Windows.Media.Brushes.Transparent;
+            slot.BorderThickness = new Thickness(0);
+        }
+
+        public void HighlightKey(int keyIndex, bool? isMicMuted = null)
         {
             // IsHitTestVisible을 잠시 True로 바꿔야 드래그가 가능하지만, 
             // 평소에는 클릭 통과를 위해 False여야 함. 
@@ -230,21 +283,47 @@ namespace SayoOSD
             DebugLog?.Invoke($"[OSD] HighlightKey: {keyIndex} (Mode: {_osdMode})");
             if (_osdMode == 2) return; // 항상 끄기 모드면 무시
 
+            if (isMicMuted.HasValue) _isMicMuted = isMicMuted;
+
             // 모든 슬롯 초기화
-            foreach (var slot in _slots)
-            {
-                slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)); // 반투명
-                byte bgAlpha = _currentSettings != null ? (byte)_currentSettings.OsdBackgroundAlpha : (byte)50;
-                slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(bgAlpha, 0xFF, 0xFF, 0xFF)); // 설정된 배경 농도
-                slot.BorderBrush = System.Windows.Media.Brushes.Transparent;
-                slot.BorderThickness = new Thickness(0);
-            }
+            RefreshAllSlotsBackground();
 
             // 해당 키 하이라이트
             if (keyIndex >= 1 && keyIndex <= 12)
             {
                 var target = _slots[keyIndex - 1];
-                target.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC)); // 파란색 강조
+
+                // 마이크 키인지 확인
+                bool isMicKey = false;
+                bool isSpeakerKey = false;
+                if (_currentSettings != null)
+                {
+                    var btn = _currentSettings.Buttons.Find(b => b.Layer == _currentLayer && b.Index == keyIndex);
+                    if (btn != null)
+                    {
+                        if (btn.TargetLayer == 99) isMicKey = true;
+                        if (btn.TargetLayer == 106 || btn.TargetLayer == 202) isSpeakerKey = true;
+                    }
+                }
+
+                if (isMicKey && _isMicMuted.HasValue)
+                {
+                    // 마이크 상태 강조 (더 진한 색)
+                    target.Background = _isMicMuted.Value 
+                        ? new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0xFF, 0x00, 0x00)) // Mute: Red
+                        : new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0x00, 0xFF, 0x00)); // Unmute: Green
+                }
+                else if (isSpeakerKey && _isSpeakerMuted.HasValue)
+                {
+                    // 스피커 상태 강조
+                    target.Background = _isSpeakerMuted.Value
+                        ? new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0xFF, 0x45, 0x00)) // Mute: OrangeRed
+                        : new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0x00, 0xBF, 0xFF)); // Unmute: DeepSkyBlue
+                }
+                else
+                {
+                    target.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC)); // 기본: 파란색 강조
+                }
                 target.BorderBrush = System.Windows.Media.Brushes.Yellow;
                 target.BorderThickness = new Thickness(2);
             }

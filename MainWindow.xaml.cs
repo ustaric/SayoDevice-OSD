@@ -1,4 +1,5 @@
-﻿﻿using System;
+﻿using System;
+using System.Diagnostics; // Process.Start
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -40,6 +41,9 @@ namespace SayoOSD
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern uint RegisterWindowMessage(string lpString);
         private uint _wmShowMessage;
+        
+        private AudioController _audioController; // 오디오 제어 분리
+        private InputExecutor _inputExecutor; // [추가] 실행 로직 분리
 
         public MainWindow()
         {
@@ -49,7 +53,7 @@ namespace SayoOSD
 
             InitializeComponent();
             _osd = new OsdWindow();
-            _osd.DebugLog += (msg) => AppendLogFile(msg); // OSD 로그를 파일로 저장
+            _osd.DebugLog += (msg) => LogManager.Write(msg); // [수정] OSD 로그를 LogManager로 전달
             
             // 설정 로드
             _settings = AppSettings.Load();
@@ -57,6 +61,7 @@ namespace SayoOSD
 
             // 로그 파일 저장 설정 적용 및 이벤트 연결
             ChkEnableFileLog.IsChecked = _settings.EnableFileLog;
+            LogManager.Enabled = _settings.EnableFileLog; // [추가] 초기 로그 설정 적용
             ChkEnableFileLog.Checked += ChkEnableFileLog_CheckedChanged;
             ChkEnableFileLog.Unchecked += ChkEnableFileLog_CheckedChanged;
 
@@ -153,10 +158,24 @@ namespace SayoOSD
             modeItem.DropDownItems.Add("항상 끄기", null, (s, e) => { _settings.OsdMode = 2; _osd.UpdateSettings(_settings); AppSettings.Save(_settings); });
             contextMenu.Items.Add(modeItem);
 
+            // 2. OSD 이동
+            var moveItem = new System.Windows.Forms.ToolStripMenuItem("OSD 이동");
+            moveItem.Click += (s, e) => {
+                bool isMoving = _osd.ResizeMode == ResizeMode.CanResize;
+                _osd.SetMoveMode(!isMoving);
+                moveItem.Checked = !isMoving;
+            };
+            contextMenu.Items.Add(moveItem);
+
             contextMenu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
 
             // 3. 종료
             contextMenu.Items.Add("종료", null, (s, e) => Dispatcher.Invoke(() => this.Close()));
+
+            // 메뉴 열릴 때 체크 상태 동기화
+            contextMenu.Opening += (s, e) => {
+                moveItem.Checked = _osd.ResizeMode == ResizeMode.CanResize;
+            };
 
             _notifyIcon.ContextMenuStrip = contextMenu;
 
@@ -181,6 +200,12 @@ namespace SayoOSD
             this.Loaded += MainWindow_Loaded;
             this.Closing += (s, e) => 
             { 
+                // 오디오 컨트롤러 정리
+                if (_audioController != null)
+                {
+                    _audioController.Dispose();
+                    _audioController = null;
+                }
                 AppSettings.Save(_settings); // 종료 시 설정(위치 포함) 저장
                 _osd.Close(); 
                 _notifyIcon.Dispose(); 
@@ -229,7 +254,7 @@ namespace SayoOSD
                     {
                         // [추가] 레이어 이동 설정 여부 확인
                         var btn = layerButtons.FirstOrDefault(b => b.Index == index);
-                        bool isLayerMove = btn != null && btn.TargetLayer >= 0 && btn.TargetLayer <= 4;
+                        bool isLayerMove = btn != null && ((btn.TargetLayer >= 0 && btn.TargetLayer <= 4) || btn.TargetLayer == InputExecutor.LAYER_MIC_MUTE);
 
                         // 선택된 버튼은 강조색, 나머지는 기본색
                         if (index == _selectedSlotIndex)
@@ -284,8 +309,8 @@ namespace SayoOSD
             // UI 렌더링 및 초기 로그 출력이 완료된 후 장치 감지 시작 (DispatcherPriority.Background 사용)
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(async () =>
             {
-                // [수정] 프로그램 시작 직후 키 로그가 쏟아져 App 로그가 묻히는 것을 방지하기 위해 5초 대기
-                await System.Threading.Tasks.Task.Delay(5000);
+                // [수정] 프로그램 시작 직후 키 로그가 쏟아져 App 로그가 묻히는 것을 방지하기 위해 0.1초 대기
+                await System.Threading.Tasks.Task.Delay(100);
 
                 // 윈도우 핸들을 얻은 후 Raw Input 등록
                 IntPtr hwnd = new WindowInteropHelper(this).Handle;
@@ -295,6 +320,32 @@ namespace SayoOSD
 
                 // 로그 연결 후 장치 검색 시작
                 _rawInput.Initialize();
+
+                // [수정] AudioController 초기화 및 이벤트 연결
+                _audioController = new AudioController();
+                _audioController.LogMessage += (msg) => Dispatcher.Invoke(() => Log(msg));
+                _audioController.MicMuteChanged += (muted) => Dispatcher.Invoke(() => _osd.SetMicState(muted));
+                _audioController.SpeakerMuteChanged += (muted) => Dispatcher.Invoke(() => _osd.SetSpeakerState(muted));
+                
+                // [추가] 시스템 오디오 장치 변경 시 OSD 이름 자동 업데이트
+                _audioController.AudioDeviceChanged += (deviceName) => Dispatcher.Invoke(() => 
+                {
+                    var buttons = _settings.Buttons.Where(b => b.TargetLayer == InputExecutor.ACTION_AUDIO_CYCLE).ToList();
+                    if (buttons.Count > 0)
+                    {
+                        foreach (var btn in buttons) btn.Name = deviceName;
+                        AppSettings.Save(_settings);
+                        _osd.UpdateNames(_settings.Buttons, _currentLayer);
+                        RefreshBadges();
+                        Log($"[Audio] OSD updated to: {deviceName}");
+                    }
+                });
+                
+                _audioController.Initialize();
+
+                // [추가] InputExecutor 초기화 및 로그 연결
+                _inputExecutor = new InputExecutor();
+                _inputExecutor.LogMessage += (msg) => Dispatcher.Invoke(() => Log(msg));
 
                 // 시작 시 OSD가 잘 뜨는지 테스트
                 _osd.ShowBriefly();
@@ -404,14 +455,67 @@ namespace SayoOSD
                 if (btn != null)
                 {
                     // 타겟 레이어 콤보박스 설정
-                    int targetIndex = 0; // 기본값: 이동 없음
-                    if (btn.TargetLayer >= 0 && btn.TargetLayer <= 4)
+                    CboTargetLayer.SelectedIndex = 0; // 기본값: 이동 없음
+                    
+                    // 프로그램 실행 설정이 있는지 확인
+                    if (!string.IsNullOrEmpty(btn.ProgramPath) && btn.TargetLayer != InputExecutor.ACTION_TEXT_MACRO)
                     {
-                        targetIndex = btn.TargetLayer + 1; // 0번 인덱스가 '이동 없음'이므로 +1
+                        foreach (var item in CboTargetLayer.Items)
+                        {
+                            if (item is System.Windows.Controls.ComboBoxItem cbi && 
+                                cbi.Tag != null && 
+                                int.TryParse(cbi.Tag.ToString(), out int tagVal) && 
+                                tagVal == InputExecutor.ACTION_RUN_PROGRAM)
+                            {
+                                CboTargetLayer.SelectedItem = cbi;
+                                cbi.ToolTip = btn.ProgramPath; // 툴팁으로 경로 표시
+                                break;
+                            }
+                        }
                     }
-                    if (targetIndex < CboTargetLayer.Items.Count)
+                    // [추가] 텍스트 매크로 선택 시 (프리셋 확인 및 선택)
+                    else if (btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO)
                     {
-                        CboTargetLayer.SelectedIndex = targetIndex;
+                        bool found = false;
+                        // 1. 프리셋(Uid 일치) 찾기
+                        foreach (var item in CboTargetLayer.Items)
+                        {
+                            if (item is System.Windows.Controls.ComboBoxItem cbi && cbi.Uid == btn.ProgramPath)
+                            {
+                                CboTargetLayer.SelectedItem = cbi;
+                                found = true;
+                                break;
+                            }
+                        }
+                        // 2. 없으면 기본 항목(새로 입력) 선택
+                        if (!found)
+                        {
+                            foreach (var item in CboTargetLayer.Items)
+                            {
+                                if (item is System.Windows.Controls.ComboBoxItem cbi && 
+                                    int.TryParse(cbi.Tag?.ToString(), out int t) && t == InputExecutor.ACTION_TEXT_MACRO && string.IsNullOrEmpty(cbi.Uid))
+                                {
+                                    CboTargetLayer.SelectedItem = cbi;
+                                    cbi.ToolTip = btn.ProgramPath;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // 레이어 이동 또는 마이크 설정 확인
+                        foreach (var item in CboTargetLayer.Items)
+                        {
+                            if (item is System.Windows.Controls.ComboBoxItem cbi && 
+                                cbi.Tag != null && 
+                                int.TryParse(cbi.Tag.ToString(), out int tagVal) && 
+                                tagVal == btn.TargetLayer)
+                            {
+                                CboTargetLayer.SelectedItem = cbi;
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -432,11 +536,93 @@ namespace SayoOSD
             {
                 if (int.TryParse(item.Tag.ToString(), out int targetLayer))
                 {
-                    if (btn.TargetLayer != targetLayer)
+                    // 프로그램 연결 선택 시
+                    if (targetLayer == InputExecutor.ACTION_RUN_PROGRAM)
                     {
-                        btn.TargetLayer = targetLayer;
-                        AppSettings.Save(_settings);
-                        Log($"[Setting] Key {btn.Index} Target Layer -> {item.Content}");
+                        // 파일 선택 대화상자 표시
+                        var dlg = new Microsoft.Win32.OpenFileDialog();
+                        dlg.Filter = "Executables (*.exe)|*.exe|All files (*.*)|*.*";
+                        
+                        // 이미 경로가 있다면 해당 경로에서 시작 (선택 사항)
+                        if (!string.IsNullOrEmpty(btn.ProgramPath))
+                        {
+                            try { dlg.InitialDirectory = System.IO.Path.GetDirectoryName(btn.ProgramPath); } catch { }
+                        }
+
+                        if (dlg.ShowDialog() == true)
+                        {
+                            btn.ProgramPath = dlg.FileName;
+                            btn.TargetLayer = -1; // 프로그램 실행 시 레이어 이동 해제
+                            item.ToolTip = btn.ProgramPath; // 툴팁 업데이트
+                            AppSettings.Save(_settings);
+                            Log($"[Setting] Key {btn.Index} Action -> Run: {btn.ProgramPath}");
+                        }
+                        else
+                        {
+                            // 취소 시 이전 상태로 복구 (UI 리셋)
+                            UpdateEditControls();
+                            return;
+                        }
+                    }
+                    // [추가] 텍스트 매크로 선택 시
+                    else if (targetLayer == InputExecutor.ACTION_TEXT_MACRO)
+                    {
+                        // 프리셋 선택인 경우 (Uid에 텍스트가 있음)
+                        if (!string.IsNullOrEmpty(item.Uid))
+                        {
+                            btn.ProgramPath = item.Uid;
+                            btn.TargetLayer = targetLayer;
+                            btn.Name = item.Uid; // 이름도 변경
+                            
+                            _osd.UpdateNames(_settings.Buttons, _currentLayer);
+                            RefreshBadges();
+                            AppSettings.Save(_settings);
+                            Log($"[Setting] Key {btn.Index} Macro -> {item.Uid} (Preset)");
+                            return;
+                        }
+
+                        // 신규 입력 (기본 항목)
+                        // 간단한 입력 다이얼로그 표시
+                        string currentText = (btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO) ? btn.ProgramPath : "";
+                        string input = ShowInputDialog(
+                            LanguageManager.GetString(_settings.Language, "TitleInputText"),
+                            LanguageManager.GetString(_settings.Language, "MsgEnterText"),
+                            currentText);
+
+                        if (input != null) // 취소가 아닐 때
+                        {
+                            btn.ProgramPath = input; // 텍스트 내용을 ProgramPath에 저장
+                            btn.TargetLayer = targetLayer;
+                            
+                            // [추가] 입력한 상용구 내용을 키 이름으로 자동 설정 (목록에서 확인 가능)
+                            btn.Name = input;
+                            _osd.UpdateNames(_settings.Buttons, _currentLayer);
+                            RefreshBadges();
+                            
+                            item.ToolTip = input;
+                            AppSettings.Save(_settings);
+                            Log($"[Setting] Key {btn.Index} Macro -> {input}");
+                            
+                            // 목록 갱신 (새로운 상용구 추가) 및 재선택
+                            RefreshTargetLayerList();
+                            UpdateEditControls();
+                        }
+                        else
+                        {
+                            UpdateEditControls(); // 취소 시 복구
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // 일반 레이어 이동 또는 마이크
+                        if (btn.TargetLayer != targetLayer || btn.ProgramPath != null)
+                        {
+                            btn.TargetLayer = targetLayer;
+                            btn.ProgramPath = null; // 프로그램 실행 해제
+                            AppSettings.Save(_settings);
+                            Log($"[Setting] Key {btn.Index} Action -> {item.Content}");
+                        }
                     }
                 }
             }
@@ -486,66 +672,135 @@ namespace SayoOSD
             // 입력 감지 모드일 때 처리
             if (_isAutoDetecting)
             {
-                if (_candidateCount >= 10) return; // 10개 수집 후 정지
-
-                Dispatcher.Invoke(() => {
-                    // 후보군은 파란색으로 표시
-                    AddLog(data, hex, "Candidate Signal (Double-click to map)", true);
-                    _candidateCount++;
-                    if (_candidateCount >= 10)
-                    {
-                        BtnAutoDetect.Content = "감지 완료 (선택하세요)";
-                    }
-                });
-                return; // 감지 중에는 일반 로직 건너뜀
+                HandleAutoDetect(data, hex);
+                return;
             }
 
-            byte keyIndex = 0; // 0이면 매핑 안됨
-
-            // 설정된 매핑 확인
-            // 1. 현재 레이어에서 먼저 검색
-            var mappedBtn = _settings.Buttons.FirstOrDefault(b => b.TriggerPattern == signature && b.Layer == _currentLayer);
-            // 2. 없으면 전체 레이어에서 검색 (다른 레이어의 고유 키일 경우)
-            if (mappedBtn == null)
-                mappedBtn = _settings.Buttons.FirstOrDefault(b => b.TriggerPattern == signature);
-
-            if (mappedBtn != null)
+            // 1. 버튼 찾기
+            var btn = FindMappedButton(signature);
+            
+            if (btn == null)
             {
-                keyIndex = (byte)mappedBtn.Index;
-                int newLayer = _currentLayer;
-                
-                // 레이어 이동 로직
-                // 1순위: 타겟 레이어가 설정되어 있으면 그곳으로 이동
-                if (mappedBtn.TargetLayer >= 0 && mappedBtn.TargetLayer <= 4)
-                {
-                    newLayer = mappedBtn.TargetLayer;
-                }
-                // 2순위: 타겟 설정은 없지만, 다른 레이어에만 존재하는 키라면 해당 레이어로 이동 (하드웨어 동기화)
-                else if (_currentLayer != mappedBtn.Layer)
-                {
-                    newLayer = mappedBtn.Layer;
-                }
+                // 매핑되지 않은 신호 로그
+                LogUnknownSignal(data, hex);
+                return;
+            }
 
-                // 레이어가 변경되었다면 적용 및 저장
-                if (_currentLayer != newLayer)
+            // 2. 기능 실행 및 레이어 변경 계산
+            int newLayer = ExecuteButtonLogic(btn, out bool? micState);
+
+            // 3. 레이어 변경 적용
+            if (_currentLayer != newLayer)
+            {
+                ChangeLayer(newLayer);
+            }
+
+            // 4. OSD 표시 및 로그
+            HandleOsdAndLog(data, hex, btn, micState);
+        }
+
+        // [리팩토링] 자동 감지 처리
+        private void HandleAutoDetect(byte[] data, string hex)
+        {
+            if (_candidateCount >= 10) return;
+
+            Dispatcher.Invoke(() => {
+                AddLog(data, hex, "Candidate Signal (Double-click to map)", true);
+                _candidateCount++;
+                if (_candidateCount >= 10)
                 {
-                    _currentLayer = newLayer;
-                    _settings.LastLayerIndex = _currentLayer;
-                    AppSettings.Save(_settings); // 변경된 레이어 저장
+                    BtnAutoDetect.Content = "감지 완료 (선택하세요)";
+                }
+            });
+        }
+
+        // [리팩토링] 매핑된 버튼 찾기
+        private ButtonConfig FindMappedButton(string signature)
+        {
+            // 1. 현재 레이어에서 먼저 검색
+            var btn = _settings.Buttons.FirstOrDefault(b => b.TriggerPattern == signature && b.Layer == _currentLayer);
+            // 2. 없으면 전체 레이어에서 검색
+            if (btn == null)
+                btn = _settings.Buttons.FirstOrDefault(b => b.TriggerPattern == signature);
+            return btn;
+        }
+
+        // [리팩토링] 버튼 기능 실행 로직
+        private int ExecuteButtonLogic(ButtonConfig btn, out bool? micState)
+        {
+            int newLayer = _currentLayer;
+            micState = null;
+
+            // 1순위: 타겟 레이어/기능 설정 확인
+            if (btn.TargetLayer >= 0 && btn.TargetLayer <= 4)
+            {
+                newLayer = btn.TargetLayer;
+            }
+            else if (btn.TargetLayer == InputExecutor.LAYER_MIC_MUTE)
+            {
+                micState = _audioController.ToggleMicMute();
+            }
+            else if (btn.TargetLayer >= 101 && btn.TargetLayer <= 106)
+            {
+                _inputExecutor.ExecuteMediaKey(btn.TargetLayer);
+            }
+            else if (btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO && !string.IsNullOrEmpty(btn.ProgramPath))
+            {
+                _inputExecutor.ExecuteMacro(btn.ProgramPath);
+            }
+            else if (btn.TargetLayer == InputExecutor.ACTION_AUDIO_CYCLE)
+            {
+                string newDeviceName = _audioController.CycleAudioDevice();
+                if (!string.IsNullOrEmpty(newDeviceName))
+                {
+                    btn.Name = newDeviceName;
+                    AppSettings.Save(_settings);
                     Dispatcher.Invoke(() => {
                         _osd.UpdateNames(_settings.Buttons, _currentLayer);
-                        UpdateLayerRadioButton(_currentLayer); // UI 동기화
+                        RefreshBadges();
                     });
                 }
             }
-
-            // 1~12번 키인 경우 OSD 표시 (로그 일시정지와 무관하게 작동)
-            if (keyIndex >= 1 && keyIndex <= 12)
+            // 2순위: 다른 레이어의 키라면 해당 레이어로 이동 (하드웨어 동기화)
+            else if (_currentLayer != btn.Layer)
             {
-                AppendLogFile($"[Main] Key {keyIndex} detected. Triggering OSD.");
-                Dispatcher.Invoke(() => _osd.HighlightKey(keyIndex));
+                newLayer = btn.Layer;
             }
 
+            // 프로그램 실행 (매크로가 아닐 때)
+            if (!string.IsNullOrEmpty(btn.ProgramPath) && btn.TargetLayer != InputExecutor.ACTION_TEXT_MACRO)
+            {
+                _inputExecutor.ExecuteProgram(btn.ProgramPath);
+            }
+
+            return newLayer;
+        }
+
+        // [리팩토링] 레이어 변경 적용
+        private void ChangeLayer(int newLayer)
+        {
+            _currentLayer = newLayer;
+            _settings.LastLayerIndex = _currentLayer;
+            AppSettings.Save(_settings);
+            Dispatcher.Invoke(() => {
+                _osd.UpdateNames(_settings.Buttons, _currentLayer);
+                UpdateLayerRadioButton(_currentLayer);
+            });
+        }
+
+        // [리팩토링] OSD 표시 및 로그 기록
+        private void HandleOsdAndLog(byte[] data, string hex, ButtonConfig btn, bool? micState)
+        {
+            // 1~12번 키인 경우 OSD 표시 (로그 일시정지와 무관하게 작동)
+            if (btn.Index >= 1 && btn.Index <= 12)
+            {
+                LogManager.Write($"[Main] Key {btn.Index} detected. Triggering OSD.");
+                LogManager.Write($"[Main] [L{_currentLayer}] Key {btn.Index} detected. Triggering OSD.");
+                
+                Dispatcher.Invoke(() => _osd.HighlightKey(btn.Index, micState));
+            }
+
+            // 로그 기록
             // 노이즈 필터링: C6로 시작하는 신호는 로그에 남기지 않음
             if (hex.StartsWith("C6")) return;
 
@@ -554,11 +809,16 @@ namespace SayoOSD
             if (data.Length > 10 && data[8] == 0x81) hint = " (Key Up?)";
 
             Dispatcher.Invoke(() => {
-                if (keyIndex >= 1 && keyIndex <= 12)
-                    AddLog(data, hex, $"[Key {keyIndex}] Matched{hint}");
-                else
-                    AddLog(data, hex, $"Unknown Signal{hint}");
+                string msg = $"[L{_currentLayer}] [Key {btn.Index}] Matched{hint}";
+                AddLog(data, hex, msg);
             });
+        }
+
+        private void LogUnknownSignal(byte[] data, string hex)
+        {
+            if (hex.StartsWith("C6")) return;
+            string hint = (data.Length > 10 && data[8] == 0x81) ? " (Key Up?)" : "";
+            Dispatcher.Invoke(() => AddLog(data, hex, $"[L{_currentLayer}] Unknown Signal{hint}"));
         }
 
         private void AddLog(byte[] data, string dataHex, string msg, bool isCandidate = false)
@@ -598,21 +858,7 @@ namespace SayoOSD
             // 파일에도 기록
             string logMsg = msg;
             if (rawKey != 0) logMsg = $"[Key: {rawKey:X2}] {msg}";
-            AppendLogFile(logMsg);
-        }
-
-        private void AppendLogFile(string message)
-        {
-            // 파일 로그 저장 체크박스가 꺼져있으면 기록하지 않음
-            if (ChkEnableFileLog.IsChecked != true) return;
-
-            try
-            {
-                string path = System.IO.Path.Combine(AppContext.BaseDirectory, "log.txt");
-                string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
-                System.IO.File.AppendAllText(path, $"[{timestamp}] {message}{Environment.NewLine}");
-            }
-            catch { /* 파일 쓰기 실패 시 무시 (충돌 방지) */ }
+            LogManager.Write(logMsg); // [수정] LogManager 사용
         }
 
         private void Log(string msg)
@@ -670,6 +916,7 @@ namespace SayoOSD
                     btn.TriggerPattern = null;
                     btn.TargetLayer = -1;
                     btn.Name = $"Key {slotIndex}"; // 기본 이름으로 복구
+                    btn.ProgramPath = null;
 
                     AppSettings.Save(_settings);
 
@@ -764,6 +1011,7 @@ namespace SayoOSD
             {
                 _settings.EnableFileLog = ChkEnableFileLog.IsChecked == true;
                 AppSettings.Save(_settings);
+                LogManager.Enabled = _settings.EnableFileLog; // [추가] 실시간 설정 반영
             }
         }
 
@@ -823,9 +1071,11 @@ namespace SayoOSD
             if (LblLayer != null) LblLayer.Text = LanguageManager.GetString(lang, "LblLayer");
             if (LblTarget != null) LblTarget.Text = LanguageManager.GetString(lang, "LblTarget");
             
-            if (CboTargetLayer != null && CboTargetLayer.Items.Count > 0)
+            if (CboTargetLayer != null)
             {
-                (CboTargetLayer.Items[0] as System.Windows.Controls.ComboBoxItem).Content = LanguageManager.GetString(lang, "TargetNone");
+                RefreshTargetLayerList();
+                // 선택 상태 복구
+                if (_selectedSlotIndex > 0) UpdateEditControls();
             }
 
             if (BtnAutoDetect != null) BtnAutoDetect.Content = LanguageManager.GetString(lang, "BtnAutoDetect");
@@ -836,6 +1086,162 @@ namespace SayoOSD
             if (BtnSave != null) BtnSave.Content = LanguageManager.GetString(lang, "BtnSave");
             if (BtnHide != null) BtnHide.Content = LanguageManager.GetString(lang, "BtnHide");
             if (BtnOpenSettings != null) BtnOpenSettings.Content = LanguageManager.GetString(lang, "BtnOpenSettings");
+        }
+
+        private void RefreshTargetLayerList()
+        {
+            if (CboTargetLayer == null) return;
+            string lang = _settings.Language;
+
+            // 이벤트 핸들러 임시 제거 (갱신 중 발생 방지)
+            CboTargetLayer.SelectionChanged -= CboTargetLayer_SelectionChanged;
+            CboTargetLayer.Items.Clear();
+
+            try
+            {
+                // 1. 기능 없음
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "TargetNone"), Tag = -1 });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.Separator());
+
+                // 미디어 제어
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "HeaderMedia"), IsEnabled = false, FontWeight = FontWeights.Bold, Foreground = System.Windows.Media.Brushes.Gray });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionMediaPlayPause"), Tag = InputExecutor.ACTION_MEDIA_PLAYPAUSE });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionMediaNext"), Tag = InputExecutor.ACTION_MEDIA_NEXT });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionMediaPrev"), Tag = InputExecutor.ACTION_MEDIA_PREV });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionVolUp"), Tag = InputExecutor.ACTION_VOL_UP });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionVolDown"), Tag = InputExecutor.ACTION_VOL_DOWN });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionVolMute"), Tag = InputExecutor.ACTION_VOL_MUTE });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.Separator());
+
+                // 레이어 이동
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "HeaderLayerMove"), IsEnabled = false, FontWeight = FontWeights.Bold, Foreground = System.Windows.Media.Brushes.Gray });
+                for (int i = 0; i < 5; i++) CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = $"Fn {i}", Tag = i });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.Separator());
+
+                // 마이크 & 프로그램
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = "Mic Mute (Toggle)", Tag = InputExecutor.LAYER_MIC_MUTE });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.Separator());
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionRun"), Tag = InputExecutor.ACTION_RUN_PROGRAM });
+                
+                // [추가] 매크로 (신규 입력)
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionTextMacro"), Tag = InputExecutor.ACTION_TEXT_MACRO });
+                
+                // [추가] 기존 상용구 목록 (중복 제거)
+                var existingMacros = _settings.Buttons
+                    .Where(b => b.TargetLayer == InputExecutor.ACTION_TEXT_MACRO && !string.IsNullOrEmpty(b.ProgramPath))
+                    .Select(b => b.ProgramPath)
+                    .Distinct()
+                    .OrderBy(s => s)
+                    .ToList();
+
+                if (existingMacros.Count > 0)
+                {
+                    CboTargetLayer.Items.Add(new System.Windows.Controls.Separator());
+                    foreach (var macro in existingMacros)
+                    {
+                        // Uid에 매크로 텍스트 저장
+                        var cbi = new System.Windows.Controls.ComboBoxItem 
+                        { 
+                            Content = $"\"{macro}\"", 
+                            Tag = InputExecutor.ACTION_TEXT_MACRO, 
+                            Uid = macro, 
+                            ToolTip = macro 
+                        };
+
+                        // [추가] 우클릭 삭제 메뉴
+                        var contextMenu = new System.Windows.Controls.ContextMenu();
+                        var deleteItem = new System.Windows.Controls.MenuItem { Header = LanguageManager.GetString(lang, "CtxDeleteMacro"), Tag = macro };
+                        deleteItem.Click += DeleteMacro_Click;
+                        contextMenu.Items.Add(deleteItem);
+                        cbi.ContextMenu = contextMenu;
+
+                        CboTargetLayer.Items.Add(cbi);
+                    }
+                }
+
+                CboTargetLayer.Items.Add(new System.Windows.Controls.Separator());
+
+                // 오디오 사이클
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionAudioCycle"), Tag = InputExecutor.ACTION_AUDIO_CYCLE });
+            }
+            finally
+            {
+                CboTargetLayer.SelectionChanged += CboTargetLayer_SelectionChanged;
+            }
+        }
+
+        // [추가] 상용구 삭제 처리
+        private void DeleteMacro_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.MenuItem item && item.Tag is string macro)
+            {
+                string msg = LanguageManager.GetString(_settings.Language, "MsgDeleteMacroConfirm").Replace("{0}", macro);
+                string title = LanguageManager.GetString(_settings.Language, "TitleDeleteMacro");
+
+                if (System.Windows.MessageBox.Show(msg, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+                {
+                    bool changed = false;
+                    // 해당 매크로를 사용하는 모든 버튼 찾아서 초기화
+                    foreach (var btn in _settings.Buttons)
+                    {
+                        if (btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO && btn.ProgramPath == macro)
+                        {
+                            btn.TargetLayer = -1;
+                            btn.ProgramPath = null;
+                            btn.Name = $"Key {btn.Index}"; // 이름도 기본값으로 복구
+                            changed = true;
+                        }
+                    }
+
+                    if (changed)
+                    {
+                        AppSettings.Save(_settings);
+                        
+                        // UI 및 OSD 갱신
+                        _osd.UpdateNames(_settings.Buttons, _currentLayer);
+                        RefreshBadges();
+                        
+                        // 목록 갱신 (삭제된 항목 제거됨)
+                        RefreshTargetLayerList();
+                        UpdateEditControls(); // 현재 선택된 슬롯의 콤보박스 상태 업데이트
+                        Log($"[Macro] Deleted preset: {macro}");
+                    }
+                }
+            }
+        }
+
+        // [추가] 간단한 텍스트 입력 다이얼로그
+        private string ShowInputDialog(string title, string prompt, string defaultText)
+        {
+            Window inputWindow = new Window
+            {
+                Title = title, Width = 400, Height = 200,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this, ResizeMode = ResizeMode.NoResize,
+                WindowStyle = WindowStyle.ToolWindow
+            };
+
+            var stack = new System.Windows.Controls.StackPanel { Margin = new Thickness(20) };
+            stack.Children.Add(new System.Windows.Controls.TextBlock { Text = prompt, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
+            
+            var txtInput = new System.Windows.Controls.TextBox { Text = defaultText ?? "", Height = 30, VerticalContentAlignment = VerticalAlignment.Center };
+            stack.Children.Add(txtInput);
+
+            var btnPanel = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Margin = new Thickness(0, 20, 0, 0) };
+            var btnOk = new System.Windows.Controls.Button { Content = "OK", Width = 80, Height = 30, IsDefault = true, Margin = new Thickness(0, 0, 10, 0) };
+            var btnCancel = new System.Windows.Controls.Button { Content = "Cancel", Width = 80, Height = 30, IsCancel = true };
+            
+            string result = null;
+            btnOk.Click += (s, e) => { result = txtInput.Text; inputWindow.Close(); };
+            btnCancel.Click += (s, e) => { inputWindow.Close(); };
+
+            btnPanel.Children.Add(btnOk);
+            btnPanel.Children.Add(btnCancel);
+            stack.Children.Add(btnPanel);
+            inputWindow.Content = stack;
+
+            inputWindow.ShowDialog();
+            return result;
         }
     }
 }

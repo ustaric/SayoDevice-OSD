@@ -10,6 +10,7 @@ namespace SayoOSD
         private AppSettings _settings;
         private RawInputReceiver _rawInput;
         private OsdWindow _osd;
+        private System.Windows.Controls.Button _btnLicense; // 라이선스 버튼 동적 추가
 
         public SettingsWindow(AppSettings settings, RawInputReceiver rawInput, OsdWindow osd)
         {
@@ -25,6 +26,20 @@ namespace SayoOSD
             TxtTimeout.Text = _settings.OsdTimeout.ToString();
             CboMode.SelectedIndex = _settings.OsdMode;
             ChkMoveOsd.IsChecked = _osd.ResizeMode == ResizeMode.CanResize;
+
+            // [추가] 라이선스 버튼 생성 및 설정
+            _btnLicense = new System.Windows.Controls.Button();
+            _btnLicense.Click += BtnLicense_Click;
+            _btnLicense.Margin = new Thickness(0, 10, 0, 0);
+            _btnLicense.Height = 24;
+
+            // UI 로드 후 버튼을 메인 패널(GrpOsd의 부모)의 맨 아래에 추가
+            this.Loaded += (s, e) => {
+                if (GrpOsd.Parent is System.Windows.Controls.Panel parent && !parent.Children.Contains(_btnLicense))
+                {
+                    parent.Children.Add(_btnLicense);
+                }
+            };
 
             UpdateLanguage();
             RefreshDeviceList();
@@ -107,6 +122,14 @@ namespace SayoOSD
             AppSettings.Save(_settings);
         }
 
+        // [추가] 라이선스 버튼 클릭 이벤트
+        private void BtnLicense_Click(object sender, RoutedEventArgs e)
+        {
+            string license = LanguageManager.GetString(_settings.Language, "LicenseText");
+            string title = LanguageManager.GetString(_settings.Language, "TitleLicense");
+            System.Windows.MessageBox.Show(license, title, MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
         public void UpdateLanguage()
         {
             string lang = _settings.Language;
@@ -123,6 +146,8 @@ namespace SayoOSD
             LblMode.Text = LanguageManager.GetString(lang, "LblMode");
             ChkMoveOsd.Content = LanguageManager.GetString(lang, "ChkMoveOsd");
             BtnResetSize.Content = LanguageManager.GetString(lang, "BtnResetSize");
+            
+            if (_btnLicense != null) _btnLicense.Content = LanguageManager.GetString(lang, "BtnLicense");
         }
     }
 }

@@ -78,14 +78,9 @@
 
                 <!-- Row 3: 설정 컨트롤 (이름, 타겟, 버튼) -->
                 <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
-                    <TextBlock x:Name="LblTarget" Text="레이어 이동:" VerticalAlignment="Center" Margin="0,0,5,0" Width="71"/>
-                    <ComboBox x:Name="CboTargetLayer" Width="80" VerticalAlignment="Center" SelectedIndex="0" SelectionChanged="CboTargetLayer_SelectionChanged">
-                        <ComboBoxItem Content="이동 없음" Tag="-1"/>
-                        <ComboBoxItem Content="Fn 0" Tag="0"/>
-                        <ComboBoxItem Content="Fn 1" Tag="1"/>
-                        <ComboBoxItem Content="Fn 2" Tag="2"/>
-                        <ComboBoxItem Content="Fn 3" Tag="3"/>
-                        <ComboBoxItem Content="Fn 4" Tag="4"/>
+                    <TextBlock x:Name="LblTarget" VerticalAlignment="Center" Margin="0,0,5,0" Width="34"><Run Language="ko-kr" Text=" "/><Run Text="기능:"/></TextBlock>
+                    <ComboBox x:Name="CboTargetLayer" Width="150" VerticalAlignment="Center" SelectedIndex="0" SelectionChanged="CboTargetLayer_SelectionChanged">
+                        <!-- Items populated in code -->
                     </ComboBox>
 
                     <Button x:Name="BtnAutoDetect" Content="자동 감지" Click="BtnAutoDetect_Click" Padding="10,2" Margin="20,0,0,0"/>
