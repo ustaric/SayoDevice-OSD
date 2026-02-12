@@ -408,6 +408,12 @@ namespace SayoOSD.ViewModels
 
                 if (hex.StartsWith("C6")) return;
 
+                // [추가] 3번째 바이트(Index 2)가 0x37(Release)인 경우 매핑하지 않고 무시 (0x36 Press만 허용)
+                if (data.Length > 2 && data[2] == 0x37)
+                {
+                    return;
+                }
+
                 string currentKey = (data.Length > 10) ? data[10].ToString("X2") : "";
                 if (_ignoredSignatures.Contains(currentKey))
                 {
