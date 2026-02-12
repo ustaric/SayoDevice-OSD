@@ -1,7 +1,8 @@
-﻿﻿using System;
+using System;
 using System.IO;
+using SayoOSD.Managers;
 
-namespace SayoOSD
+namespace SayoOSD.Managers
 {
     public static class LogManager
     {

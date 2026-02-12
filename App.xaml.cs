@@ -6,6 +6,8 @@ using System.Collections.Generic; // 리스트 사용을 위해 추가
 using System.Linq;
 using System.Threading;
 using System.Security.Principal; // 관리자 권한 확인용
+using SayoOSD.Managers;
+using SayoOSD;
 
 namespace SayoOSD
 {

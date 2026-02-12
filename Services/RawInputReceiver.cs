@@ -1,10 +1,11 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using SayoOSD.Services;
 
-namespace SayoOSD
+namespace SayoOSD.Services
 {
     public class DeviceInfo
     {
@@ -275,6 +276,9 @@ namespace SayoOSD
 
                 if (isTarget)
                 {
+                    // [디버그] RawInput 메시지 수신 확인 (장치로부터 신호가 오는지 확인)
+                    // DebugLog?.Invoke($"[RawInput] WM_INPUT received from target");
+
                     if (raw.header.dwType == RIM_TYPEHID)
                     {
                         // HID 데이터 추출

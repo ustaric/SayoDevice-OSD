@@ -9,9 +9,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>key.ico</ApplicationIcon>
     <PackageIcon>key124.png</PackageIcon>
-    <FileVersion>0.0.1</FileVersion>
-    <AssemblyVersion>0.0.1</AssemblyVersion>
-    <Version>0.0.1</Version>
+    <FileVersion>0.0.2</FileVersion>
+    <AssemblyVersion>0.0.2</AssemblyVersion>
+    <Version>0.0.2</Version>
     <Company>bodmer</Company>
   </PropertyGroup>
 
@@ -32,6 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="HidSharp" Version="2.6.4" />
     <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
 

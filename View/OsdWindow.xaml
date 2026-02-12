@@ -1,10 +1,10 @@
-﻿<Window x:Class="SayoOSD.OsdWindow"
+<Window x:Class="SayoOSD.Views.OsdWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Sayo OSD" Height="180" Width="500"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" Focusable="False"
-        IsHitTestVisible="False"> 
+        IsHitTestVisible="False" UseLayoutRounding="True"> 
     <!-- 기본값 False (클릭 통과), 이동 모드에서만 True로 변경 -->
     
     <Border CornerRadius="10" Background="#AA000000" Padding="10">

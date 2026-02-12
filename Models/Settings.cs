@@ -1,10 +1,22 @@
-﻿﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json; // System.Text.Json 패키지 필요 (최신 .NET 기본 포함)
+using System.Windows.Media; // For Brush
+using SayoOSD.Models;
 
-namespace SayoOSD
+namespace SayoOSD.Models
 {
+    public class LogEntry
+    {
+        public string Time { get; set; }
+        public string RawKeyHex { get; set; }
+        public byte RawKeyByte { get; set; }
+        public byte[] RawBytes { get; set; } // 원본 데이터 저장
+        public string Data { get; set; }
+        public System.Windows.Media.Brush Foreground { get; set; } = System.Windows.Media.Brushes.Black;
+    }
+
     public class ButtonConfig
     {
         public int Index { get; set; } // 1 ~ 12
@@ -13,6 +25,7 @@ namespace SayoOSD
         public string Name { get; set; } = "Button";
         public string TriggerPattern { get; set; } // 매핑된 신호 패턴 (Hex String)
         public string ProgramPath { get; set; } // 실행할 프로그램 경로
+        public string IconPath { get; set; } // [추가] 아이콘 경로 (별도 지정 시)
     }
 
     public class AppSettings
@@ -20,17 +33,23 @@ namespace SayoOSD
         public string DeviceVid { get; set; } = "8089"; // SayoDevice 기본 VID (확인 필요)
         public string DevicePid { get; set; } = "000B"; // 사용자 요청 PID (000B)
         public double OsdOpacity { get; set; } = 0.8;   // 투명도 (0.1 ~ 1.0)
-        public int OsdTimeout { get; set; } = 3;        // 표시 시간 (초)
+        public double OsdTimeout { get; set; } = 3.0;   // 표시 시간 (초)
         public int OsdMode { get; set; } = 0;           // 0:자동, 1:항상켜기, 2:항상끄기
         public double OsdTop { get; set; } = -1;        // OSD 창 Y 위치 (-1이면 기본값)
         public double OsdLeft { get; set; } = -1;       // OSD 창 X 위치 (-1이면 기본값)
         public double OsdWidth { get; set; } = -1;      // OSD 창 너비 (-1이면 기본값)
         public double OsdHeight { get; set; } = -1;     // OSD 창 높이 (-1이면 기본값)
         public int OsdBackgroundAlpha { get; set; } = 50; // 배경 투명도 (0~255)
+        public bool OsdVertical { get; set; } = false;  // [추가] 세로 모드
+        public bool OsdSwapRows { get; set; } = false;  // [추가] 1번줄/7번줄 위치 교체
         public int LastLayerIndex { get; set; } = 0;    // 마지막 사용 레이어 (0~4)
         public string Language { get; set; } = "KO";    // 언어 설정 (KO/EN)
         public bool EnableFileLog { get; set; } = false; // 로그 파일 저장 여부
+        public int VolumeStep { get; set; } = 2;        // [추가] 볼륨 조절 단위 (기본 2)
         public List<ButtonConfig> Buttons { get; set; } = new List<ButtonConfig>();
+
+        // [추가] 설정 저장 알림 이벤트
+        public static event Action OnSettingsSaved;
 
         public AppSettings()
         {
@@ -52,6 +71,9 @@ namespace SayoOSD
             var options = new JsonSerializerOptions { WriteIndented = true };
             string jsonString = JsonSerializer.Serialize(settings, options);
             File.WriteAllText(path, jsonString);
+
+            // [추가] 저장 이벤트 발생
+            OnSettingsSaved?.Invoke();
         }
 
         public static AppSettings Load(string path = null)

@@ -1,4 +1,4 @@
-﻿﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -7,22 +7,42 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using System.Runtime.InteropServices; // DllImport, StructLayout 등
 using System.Windows.Interop; // WindowInteropHelper, HwndSource
+using SayoOSD.Models;
+using SayoOSD.Helpers;
+using SayoOSD.Managers;
+using SayoOSD.Views;
 
-namespace SayoOSD
+namespace SayoOSD.Views
 {
     public partial class OsdWindow : Window
     {
         private DispatcherTimer _timer;
         private DispatcherTimer _holdTimer; // 0.5초 대기용 타이머
+        private DispatcherTimer _inputCheckTimer; // [추가] 입력 상태 감지 타이머
+        private DispatcherTimer _feedbackSequenceTimer; // [추가] 피드백 순차 표시 타이머
         private Border[] _slots;
         private TextBlock[] _texts;
-        private int _osdMode = 0; // 0: Auto, 1: AlwaysOn, 2: AlwaysOff
+        private System.Windows.Controls.Image[] _images; // [추가] 아이콘 표시용 이미지 컨트롤 배열
+        private Dictionary<string, ImageSource> _iconCache = new Dictionary<string, ImageSource>(); // [추가] 아이콘 캐시
+        private int _osdMode = 0; // 0: Auto, 1: AlwaysOn, 2: AlwaysOff, 3: Bottommost
         private double _aspectRatio = 0; // 가로세로 비율 저장
         private AppSettings _currentSettings; // 현재 설정 참조
         private int _currentLayer = 0; // 현재 레이어
         private bool? _isMicMuted = null; // 마이크 상태
         private bool? _isSpeakerMuted = null; // 스피커 상태
         public event Action<string> DebugLog; // 로그 전달 이벤트
+        public event Action<int, string> OnFileDrop; // [추가] 파일 드롭 이벤트
+
+        // [추가] 관리자 권한 실행 시 드래그 앤 드롭 허용을 위한 API
+        [DllImport("user32.dll")]
+        public static extern bool ChangeWindowMessageFilter(uint msg, uint flags);
+        private const uint WM_DROPFILES = 0x0233;
+        private const uint WM_COPYGLOBALDATA = 0x0049;
+        private const uint MSGFLT_ADD = 1;
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+        private const int VK_CONTROL = 0x11;
 
         public OsdWindow()
         {
@@ -30,6 +50,7 @@ namespace SayoOSD
             
             this.ResizeMode = ResizeMode.NoResize; // 기본은 크기 조절 불가 (테두리 없음)
             this.Topmost = true; // OSD가 항상 최상위에 표시되도록 설정
+            this.IsHitTestVisible = false; // [수정] 기본은 클릭 투과 (게임 방해 금지)
 
             // 화면 오른쪽 하단 배치
             double screenWidth = SystemParameters.PrimaryScreenWidth;
@@ -40,6 +61,50 @@ namespace SayoOSD
             // 슬롯 배열 초기화
             _slots = new Border[] { Slot1, Slot2, Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11, Slot12 };
             _texts = new TextBlock[] { Txt1, Txt2, Txt3, Txt4, Txt5, Txt6, Txt7, Txt8, Txt9, Txt10, Txt11, Txt12 };
+
+            // [추가] UI 구조 변경: Border > Viewbox > TextBlock 구조를 Border > Grid > (Image, Viewbox > TextBlock) 구조로 변경
+            _images = new System.Windows.Controls.Image[12];
+            for (int i = 0; i < 12; i++)
+            {
+                var border = _slots[i];
+                var viewbox = border.Child; // 기존 Viewbox (TextBlock 포함)
+                border.Child = null; // 연결 해제
+
+                var grid = new Grid();
+                
+                // 이미지 컨트롤 생성
+                var img = new System.Windows.Controls.Image();
+                img.Stretch = Stretch.Uniform;
+                img.Margin = new Thickness(10);
+                img.Visibility = Visibility.Collapsed; // 기본은 숨김
+                img.SnapsToDevicePixels = true; // [추가] 픽셀 정렬로 선명도 향상
+                img.UseLayoutRounding = true;   // [추가] 레이아웃 반올림
+                RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+                _images[i] = img;
+
+                grid.Children.Add(img);
+                if (viewbox != null) grid.Children.Add(viewbox); // 기존 텍스트 추가
+
+                border.Child = grid;
+            }
+
+            // [추가] 드래그 앤 드롭 이벤트 연결
+            for (int i = 0; i < _slots.Length; i++)
+            {
+                int idx = i + 1; // 1-based index
+                _slots[i].AllowDrop = true;
+                _slots[i].Drop += (s, e) =>
+                {
+                    if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
+                    {
+                        string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
+                        if (files != null && files.Length > 0)
+                        {
+                            OnFileDrop?.Invoke(idx, files[0]);
+                        }
+                    }
+                };
+            }
 
             _timer = new DispatcherTimer();
             _timer.Interval = TimeSpan.FromSeconds(3); // 3초 뒤 사라짐
@@ -79,7 +144,30 @@ namespace SayoOSD
                 if (_aspectRatio == 0 && this.ActualHeight > 0) _aspectRatio = this.ActualWidth / this.ActualHeight;
                 var source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
                 source.AddHook(WndProc);
+
+                // [추가] 관리자 권한으로 실행 시에도 탐색기(일반 권한)의 드롭 메시지를 허용
+                ChangeWindowMessageFilter(WM_DROPFILES, MSGFLT_ADD);
+                ChangeWindowMessageFilter(0x004A, MSGFLT_ADD); // WM_COPYDATA
+                ChangeWindowMessageFilter(WM_COPYGLOBALDATA, MSGFLT_ADD); // WM_COPYGLOBALDATA
             };
+
+            // [추가] Ctrl 키 감지 및 클릭 투과 제어 타이머
+            _inputCheckTimer = new DispatcherTimer();
+            _inputCheckTimer.Interval = TimeSpan.FromMilliseconds(100);
+            _inputCheckTimer.Tick += (s, e) => 
+            {
+                // Ctrl 키가 눌려있거나, 이동 모드(테두리 있음)일 때만 마우스 입력 허용
+                bool isCtrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+                bool isMoveMode = this.ResizeMode == ResizeMode.CanResize;
+
+                bool shouldBeInteractive = isCtrlDown || isMoveMode;
+
+                if (this.IsHitTestVisible != shouldBeInteractive)
+                {
+                    this.IsHitTestVisible = shouldBeInteractive;
+                }
+            };
+            _inputCheckTimer.Start();
         }
 
         private void HoldTimer_Tick(object sender, EventArgs e)
@@ -111,7 +199,7 @@ namespace SayoOSD
                 };
                 this.BeginAnimation(Window.OpacityProperty, anim);
             }
-            else if (_osdMode == 1) // 항상 켜기: 하이라이트만 끄기
+            else if (_osdMode == 1 || _osdMode == 3) // 항상 켜기/제일 아래: 하이라이트만 끄기
             {
                 DebugLog?.Invoke("[OSD] Always On: 하이라이트 초기화");
             }
@@ -119,7 +207,7 @@ namespace SayoOSD
 
         public void SetMoveMode(bool enable)
         {
-            this.IsHitTestVisible = enable;
+            // IsHitTestVisible 제어는 _inputCheckTimer에서 담당함
             DebugLog?.Invoke($"[OSD] SetMoveMode: {enable}");
             this.ResizeMode = enable ? ResizeMode.CanResize : ResizeMode.NoResize; // 이동 모드일 때만 테두리 표시
             if (enable)
@@ -134,7 +222,7 @@ namespace SayoOSD
             {
                 this.Background = System.Windows.Media.Brushes.Transparent;
                 
-                if (_osdMode == 1) // 항상 켜기
+                if (_osdMode == 1 || _osdMode == 3) // 항상 켜기 or 제일 아래
                 {
                     this.Show();
                 }
@@ -156,6 +244,11 @@ namespace SayoOSD
         {
             this.Width = 500;
             this.Height = 180;
+            if (_currentSettings != null && _currentSettings.OsdVertical)
+            {
+                this.Width = 180;
+                this.Height = 500;
+            }
             // 비율 재설정
             if (this.Height > 0) _aspectRatio = this.Width / this.Height;
         }
@@ -183,6 +276,13 @@ namespace SayoOSD
             if (settings.OsdTimeout > 0)
                 _timer.Interval = TimeSpan.FromSeconds(settings.OsdTimeout);
 
+            // [추가] 레이아웃 방향 및 순서 업데이트
+            UpdateLayoutOrientation();
+
+            // [추가] 모드에 따른 Topmost 설정
+            // 1(AlwaysOn), 0(Auto)는 Topmost=true / 3(Bottommost)는 Topmost=false
+            this.Topmost = (_osdMode != 3);
+
             // 배경색 즉시 적용 (설정 변경 시 미리보기)
             RefreshAllSlotsBackground();
 
@@ -196,8 +296,92 @@ namespace SayoOSD
                 _holdTimer.Stop();
                 this.BeginAnimation(Window.OpacityProperty, null);
             }
+            else if (_osdMode == 3) // 제일 아래 (바탕화면 모드)
+            {
+                this.Show();
+                _timer.Stop();
+                _holdTimer.Stop();
+                this.BeginAnimation(Window.OpacityProperty, null);
+            }
             else if (_osdMode == 2) // 항상 끄기
                 this.Hide();
+        }
+
+        // [추가] 가로/세로 모드 및 줄 교체 처리
+        private void UpdateLayoutOrientation()
+        {
+            if (_slots == null || _slots.Length == 0 || _currentSettings == null) return;
+
+            // 슬롯들의 부모 컨테이너 찾기 (UniformGrid 가정)
+            var parent = _slots[0].Parent as System.Windows.Controls.Primitives.UniformGrid;
+            if (parent == null) return;
+
+            bool isVertical = _currentSettings.OsdVertical;
+            bool swapRows = _currentSettings.OsdSwapRows;
+
+            // 기존 자식 요소 제거 후 재배치
+            parent.Children.Clear();
+
+            if (!isVertical)
+            {
+                // --- 가로 모드 (2행 6열) ---
+                parent.Rows = 2;
+                parent.Columns = 6;
+
+                // 가로/세로 크기 자동 스왑 (가로 모드인데 세로가 더 길면 스왑)
+                if (this.Height > this.Width)
+                {
+                    double temp = this.Width;
+                    this.Width = this.Height;
+                    this.Height = temp;
+                }
+
+                if (!swapRows)
+                {
+                    // 기본: 1~6 (윗줄), 7~12 (아랫줄)
+                    for (int i = 0; i < 12; i++) parent.Children.Add(_slots[i]);
+                }
+                else
+                {
+                    // 교체: 7~12 (윗줄), 1~6 (아랫줄)
+                    for (int i = 6; i < 12; i++) parent.Children.Add(_slots[i]);
+                    for (int i = 0; i < 6; i++) parent.Children.Add(_slots[i]);
+                }
+            }
+            else
+            {
+                // --- 세로 모드 (6행 2열) ---
+                parent.Rows = 6;
+                parent.Columns = 2;
+
+                // 가로/세로 크기 자동 스왑 (세로 모드인데 가로가 더 길면 스왑)
+                if (this.Width > this.Height)
+                {
+                    double temp = this.Width;
+                    this.Width = this.Height;
+                    this.Height = temp;
+                }
+
+                // 세로 배치: (1,7), (2,8)... 순서로 채움 (UniformGrid는 행 우선 채움)
+                for (int r = 0; r < 6; r++)
+                {
+                    int idx1 = r;      // 0..5 (1~6번 키)
+                    int idx2 = r + 6;  // 6..11 (7~12번 키)
+
+                    if (!swapRows)
+                    {
+                        // 기본: 왼쪽 열(1~6), 오른쪽 열(7~12)
+                        parent.Children.Add(_slots[idx1]);
+                        parent.Children.Add(_slots[idx2]);
+                    }
+                    else
+                    {
+                        // 교체: 왼쪽 열(7~12), 오른쪽 열(1~6)
+                        parent.Children.Add(_slots[idx2]);
+                        parent.Children.Add(_slots[idx1]);
+                    }
+                }
+            }
         }
 
         public void UpdateNames(List<ButtonConfig> configs, int layer)
@@ -208,6 +392,7 @@ namespace SayoOSD
                 if (cfg.Layer == layer && cfg.Index >= 1 && cfg.Index <= 12)
                 {
                     _texts[cfg.Index - 1].Text = cfg.Name;
+                    UpdateSlotIcon(cfg.Index - 1, cfg.IconPath, cfg.ProgramPath); // [수정] 아이콘 경로 우선 사용
                 }
             }
             RefreshAllSlotsBackground();
@@ -223,6 +408,68 @@ namespace SayoOSD
         {
             _isSpeakerMuted = isMuted;
             RefreshAllSlotsBackground();
+        }
+
+        // [추가] 슬롯 아이콘 업데이트 메서드
+        private void UpdateSlotIcon(int index, string iconPath, string programPath)
+        {
+            if (_images == null || index < 0 || index >= _images.Length) return;
+
+            // 1. IconPath가 있으면 최우선 사용
+            string targetPath = iconPath;
+
+            // 2. 없으면 ProgramPath 사용 (인수 제거 로직 필요)
+            if (string.IsNullOrEmpty(targetPath) && !string.IsNullOrEmpty(programPath))
+            {
+                targetPath = programPath;
+                // 인수가 포함된 경로일 경우 실행 파일만 추출
+                if (!System.IO.File.Exists(targetPath))
+                {
+                    if (targetPath.StartsWith("\""))
+                    {
+                        int endQuote = targetPath.IndexOf('\"', 1);
+                        if (endQuote > 0) targetPath = targetPath.Substring(1, endQuote - 1);
+                    }
+                    else
+                    {
+                        int exeIndex = targetPath.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+                        if (exeIndex > 0)
+                        {
+                            // .exe 뒤에 공백이 있거나 끝이면 자름
+                            int splitIndex = exeIndex + 4;
+                            if (splitIndex < targetPath.Length && targetPath[splitIndex] == ' ')
+                                targetPath = targetPath.Substring(0, splitIndex);
+                        }
+                    }
+                }
+            }
+
+            ImageSource icon = null;
+            // 파일이 존재할 때만 아이콘 추출 시도 (.exe, .ico, .dll 등)
+            if (!string.IsNullOrEmpty(targetPath) && System.IO.File.Exists(targetPath))
+            {
+                if (!_iconCache.TryGetValue(targetPath, out icon))
+                {
+                    icon = IconHelper.GetIconFromPath(targetPath, (msg) => DebugLog?.Invoke($"[Icon] {msg}"));
+                    if (icon != null) _iconCache[targetPath] = icon;
+                }
+            }
+
+            var img = _images[index];
+            var txt = _texts[index];
+
+            if (icon != null)
+            {
+                img.Source = icon;
+                img.Visibility = Visibility.Visible;
+                txt.Visibility = Visibility.Collapsed; // 아이콘이 있으면 텍스트 숨김
+            }
+            else
+            {
+                img.Source = null;
+                img.Visibility = Visibility.Collapsed;
+                txt.Visibility = Visibility.Visible; // 아이콘이 없으면 텍스트 표시
+            }
         }
 
         private void RefreshAllSlotsBackground()
@@ -336,11 +583,134 @@ namespace SayoOSD
                 this.Opacity = _currentSettings.OsdOpacity;
             this.Show();
             
-            if (_osdMode == 0 || _osdMode == 1) // 자동 모드 또는 항상 켜기 모드일 때 타이머 작동
+            if (_osdMode == 0 || _osdMode == 1 || _osdMode == 3) // 자동, 항상 켜기, 제일 아래 모두 하이라이트 복구 타이머 작동
             {
-                DebugLog?.Invoke($"[OSD] Hold Timer 시작 (0.5s) Mode: {_osdMode}");
-                _holdTimer.Interval = TimeSpan.FromSeconds(0.5);
+                double duration = 0.5; // 기본 하이라이트 지속 시간 (항상 켜기/제일 아래 모드용)
+
+                // [수정] 자동 모드일 경우 설정된 표시 시간(OsdTimeout)을 사용
+                if (_osdMode == 0 && _currentSettings != null && _currentSettings.OsdTimeout > 0)
+                {
+                    duration = _currentSettings.OsdTimeout;
+                }
+
+                DebugLog?.Invoke($"[OSD] Hold Timer 시작 ({duration}s) Mode: {_osdMode}");
+                _holdTimer.Interval = TimeSpan.FromSeconds(duration);
                 _holdTimer.Start();
+            }
+        }
+
+        // [추가] 모드 변경 시 피드백 표시
+        public void ShowModeFeedback(string modeName, string iconPath = null, int keyIndex = -1)
+        {
+            // 기존 피드백 타이머 중지 (연속 입력 시 리셋)
+            if (_feedbackSequenceTimer != null)
+            {
+                _feedbackSequenceTimer.Stop();
+                _feedbackSequenceTimer = null;
+            }
+
+            // 아이콘 로드
+            ImageSource icon = null;
+            if (!string.IsNullOrEmpty(iconPath) && System.IO.File.Exists(iconPath))
+            {
+                if (!_iconCache.TryGetValue(iconPath, out icon))
+                {
+                    icon = IconHelper.GetIconFromPath(iconPath);
+                    if (icon != null) _iconCache[iconPath] = icon;
+                }
+            }
+
+            // 상태 업데이트 로컬 함수
+            void UpdateState(bool showIconPhase)
+            {
+                if (keyIndex >= 1 && keyIndex <= 12)
+                {
+                    UpdateSlotFeedback(keyIndex - 1, modeName, icon, showIconPhase);
+                }
+                else
+                {
+                    for (int i = 0; i < 12; i++) UpdateSlotFeedback(i, modeName, icon, showIconPhase);
+                }
+            }
+
+            // 복구 로컬 함수
+            void RestoreState()
+            {
+                if (_currentSettings != null)
+                {
+                    UpdateNames(_currentSettings.Buttons, _currentLayer);
+                    this.Opacity = _currentSettings.OsdOpacity; // 투명도 복구
+                }
+                // Auto 모드면 숨김
+                if (_osdMode == 0) this.Hide();
+            }
+
+            // 시퀀스 시작
+            if (icon != null)
+            {
+                // 1단계: 아이콘 2초
+                UpdateState(true); // 아이콘 표시
+                
+                _feedbackSequenceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.0) };
+                _feedbackSequenceTimer.Tick += (s, e) =>
+                {
+                    _feedbackSequenceTimer.Stop();
+                    
+                    // 2단계: 글씨 2초
+                    UpdateState(false); // 글씨 표시
+                    
+                    _feedbackSequenceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.0) };
+                    _feedbackSequenceTimer.Tick += (s2, e2) => { _feedbackSequenceTimer.Stop(); RestoreState(); };
+                    _feedbackSequenceTimer.Start();
+                };
+                _feedbackSequenceTimer.Start();
+            }
+            else
+            {
+                // 아이콘 없으면 글씨만 2초
+                UpdateState(false);
+                _feedbackSequenceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.0) };
+                _feedbackSequenceTimer.Tick += (s, e) => { _feedbackSequenceTimer.Stop(); RestoreState(); };
+                _feedbackSequenceTimer.Start();
+            }
+
+            // 창이 꺼져있다면 잠시 켜기 (Auto 모드 등에서 확인 가능하도록)
+            if (_osdMode == 1 || _osdMode == 3 || !this.IsVisible || this.Opacity < 0.1)
+            {
+                this.Opacity = 1.0;
+                this.Show();
+            }
+        }
+
+        // [추가] 개별 슬롯 피드백 업데이트 헬퍼
+        private void UpdateSlotFeedback(int i, string text, ImageSource icon, bool showIconPhase)
+        {
+            if (_images != null && _images[i] != null)
+            {
+                _images[i].Source = icon;
+                // 아이콘이 있고, 아이콘 표시 단계일 때만 보임
+                if (icon != null && showIconPhase)
+                {
+                    _images[i].Visibility = Visibility.Visible;
+                    _images[i].Opacity = 1.0; // 선명하게
+                }
+                else
+                {
+                    _images[i].Visibility = Visibility.Collapsed;
+                }
+            }
+            if (_texts != null && _texts[i] != null)
+            {
+                _texts[i].Text = text;
+                // 아이콘 표시 단계가 아니거나(글씨 단계), 아이콘이 아예 없으면 글씨 표시
+                if (!showIconPhase || icon == null)
+                {
+                    _texts[i].Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    _texts[i].Visibility = Visibility.Collapsed;
+                }
             }
         }
 

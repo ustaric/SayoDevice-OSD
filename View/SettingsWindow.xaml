@@ -1,7 +1,7 @@
-<Window x:Class="SayoOSD.SettingsWindow"
+<Window x:Class="SayoOSD.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings" Height="380" Width="500" ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
+        Title="Settings" Height="600" Width="650" ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
     <StackPanel Margin="10">
         <!-- 장치 설정 -->
         <GroupBox x:Name="GrpDevice" Header="장치 설정" Padding="5" Margin="0,0,0,10">
@@ -45,6 +45,27 @@
                     <CheckBox x:Name="ChkMoveOsd" Content="OSD 위치 이동 허용" VerticalAlignment="Center" Checked="ChkMoveOsd_CheckedChanged" Unchecked="ChkMoveOsd_CheckedChanged"/>
                     <Button x:Name="BtnResetSize" Content="크기 초기화" Click="BtnResetSize_Click" Margin="20,0,0,0" Padding="5,0"/>
                 </StackPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- 오디오 설정 -->
+        <GroupBox x:Name="GrpAudio" Header="오디오 설정" Padding="5" Margin="0,10,0,0">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="LblVolumeStep" Text="볼륨 조절 단위:" VerticalAlignment="Center" Width="100"/>
+                <Slider x:Name="SldVolumeStep" Width="200" Minimum="1" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" VerticalAlignment="Center" ValueChanged="SldVolumeStep_ValueChanged"/>
+                <TextBlock Text="{Binding ElementName=SldVolumeStep, Path=Value, StringFormat={}{0}}" VerticalAlignment="Center" Margin="10,0,0,0" FontWeight="Bold"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- 시스템 설정 -->
+        <GroupBox x:Name="GrpSystem" Header="시스템 설정" Padding="5" Margin="0,10,0,0">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                    <TextBlock Text="Language:" VerticalAlignment="Center" Width="80"/>
+                    <ComboBox x:Name="CboLanguage" Width="150" SelectionChanged="CboLanguage_SelectionChanged"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkEnableFileLog" Content="로그 파일 저장" Margin="0,5,0,0" Checked="ChkEnableFileLog_CheckedChanged" Unchecked="ChkEnableFileLog_CheckedChanged"/>
+                <CheckBox x:Name="ChkStartWithWindows" Content="윈도우 시작 시 자동 실행" Margin="0,5,0,0" Checked="ChkStartWithWindows_CheckedChanged" Unchecked="ChkStartWithWindows_CheckedChanged"/>
             </StackPanel>
         </GroupBox>
     </StackPanel>

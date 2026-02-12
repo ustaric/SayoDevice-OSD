@@ -1,0 +1,341 @@
+<Window x:Class="SayoOSD.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SayoDevice OSD 설정" Height="650" Width="1200">
+    <Window.Resources>
+        <Style x:Key="SubMenuItemStyle" TargetType="TextBlock">
+            <Setter Property="Width" Value="200"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+
+        <Style TargetType="Expander">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <StackPanel>
+                            <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          Content="{TemplateBinding Header}"
+                                          HorizontalContentAlignment="Stretch"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          Padding="0,10"
+                                          Cursor="Hand">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter VerticalAlignment="Center" TextElement.FontWeight="Bold" TextElement.FontSize="13"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ExpanderContent" ContentSource="Content" Visibility="Collapsed"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="ExpanderContent" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        
+        <!-- [추가] 안드로이드 스타일 점(Dot) 라디오 버튼 스타일 -->
+        <Style x:Key="LayerDotStyle" TargetType="RadioButton">
+            <Setter Property="GroupName" Value="Layers"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid Background="Transparent">
+                            <!-- 비활성 상태: 회색 점 -->
+                            <Ellipse x:Name="Dot" Width="8" Height="8" Fill="#CCCCCC" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <!-- 활성 상태: 파란색 큰 점 -->
+                            <Ellipse x:Name="ActiveDot" Width="10" Height="10" Fill="#007ACC" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ActiveDot" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Dot" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Dot" Property="Fill" Value="#999999"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="240"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Background="#F5F5F5" BorderBrush="#DDDDDD" BorderThickness="0,0,1,0">
+            <Grid Margin="10,10,0,10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="LblPaletteTitle" Text="기능 팔레트" FontWeight="Bold" FontSize="16" Margin="0,0,0,15"/>
+                
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer.Resources>
+                        <Style TargetType="{x:Type ScrollBar}">
+                            <Setter Property="Width" Value="6"/>
+                            <Setter Property="MinWidth" Value="6"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                                        <Grid x:Name="Bg" Background="{TemplateBinding Background}" SnapsToDevicePixels="true">
+                                            <Track x:Name="PART_Track" IsDirectionReversed="true" IsEnabled="{TemplateBinding IsMouseOver}">
+                                                <Track.Thumb>
+                                                    <Thumb x:Name="Thumb">
+                                                        <Thumb.Style>
+                                                            <Style TargetType="{x:Type Thumb}">
+                                                                <Setter Property="OverridesDefaultStyle" Value="true"/>
+                                                                <Setter Property="Template">
+                                                                    <Setter.Value>
+                                                                        <ControlTemplate TargetType="{x:Type Thumb}">
+                                                                            <Border x:Name="rectangle" Background="#D0D0D0" CornerRadius="3" />
+                                                                            <ControlTemplate.Triggers>
+                                                                                <Trigger Property="IsMouseOver" Value="true">
+                                                                                    <Setter TargetName="rectangle" Property="Background" Value="#A0A0A0"/>
+                                                                                </Trigger>
+                                                                            </ControlTemplate.Triggers>
+                                                                        </ControlTemplate>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </Style>
+                                                        </Thumb.Style>
+                                                    </Thumb>
+                                                </Track.Thumb>
+                                            </Track>
+                                        </Grid>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ScrollViewer.Resources>
+
+                    <StackPanel Margin="0,0,5,0">
+                        <Expander x:Name="ExpMedia" Header="미디어 제어" IsExpanded="True" Margin="0,0,0,5">
+                            <StackPanel Margin="10,5,0,5">
+                                <TextBlock Text="재생 / 일시정지" Tag="101" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="다음 곡" Tag="102" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="이전 곡" Tag="103" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="볼륨 증가" Tag="104" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="볼륨 감소" Tag="105" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="음소거" Tag="106" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="활성 창 볼륨 증가" Tag="110" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="활성 창 볼륨 감소" Tag="111" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                            </StackPanel>
+                        </Expander>
+                        
+                        <Expander x:Name="ExpAction" Header="단축키 / 실행" IsExpanded="True" Margin="0,0,0,5">
+                            <StackPanel Margin="10,5,0,5">
+                                <TextBlock Text="프로그램 실행" Tag="200" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="텍스트 매크로" Tag="201" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <Expander x:Name="ExpSystem" Header="시스템 기능" IsExpanded="False" Margin="0,0,0,5">
+                            <StackPanel Margin="10,5,0,5">
+                                <TextBlock Text="마이크 음소거" Tag="99" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="오디오 장치 전환" Tag="202" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="OSD 모드 변경" Tag="300" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <Expander x:Name="ExpLayer" Header="레이어 이동" IsExpanded="False" Margin="0,0,0,5">
+                            <StackPanel Margin="10,5,0,5">
+                                <TextBlock Text="Fn 0" Tag="0" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="Fn 1" Tag="1" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="Fn 2" Tag="2" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="Fn 3" Tag="3" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                                <TextBlock Text="Fn 4" Tag="4" MouseMove="SideItem_MouseMove" Style="{StaticResource SubMenuItemStyle}"/>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="2" Margin="0,10,10,0">
+                    <TextBlock x:Name="LblStatusSaved" Text="저장됨" HorizontalAlignment="Center" Foreground="#007ACC" FontWeight="Bold" Opacity="0" Margin="0,0,0,5" IsHitTestVisible="False"/>
+                    <Button x:Name="BtnOpenSettings" Content="⚙ 설정" Click="BtnOpenSettings_Click" Padding="10,8" Background="White" BorderBrush="#CCCCCC"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Column="1" Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,20">
+            </Grid>
+
+
+            <Grid Grid.Row="2" Margin="0,0,0,10">
+                <Grid Visibility="{Binding IsLogPanelVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <ListView x:Name="LstLog" Grid.Row="0" ItemsSource="{Binding LogEntries}" SelectionMode="Extended" KeyDown="LstLog_KeyDown" MouseDoubleClick="LstLog_MouseDoubleClick" Visibility="{Binding IsDetectionActive, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <ListView.Resources>
+                            <Style TargetType="ScrollBar">
+                                <Setter Property="Width" Value="5"/>
+                                <Style.Triggers>
+                                    <Trigger Property="Orientation" Value="Horizontal"><Setter Property="Height" Value="5"/></Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ListView.Resources>
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem"><Setter Property="Foreground" Value="{Binding Foreground}"/></Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem x:Name="MnuCopy" Header="복사" Click="BtnCopyLog_Click"/>
+                            </ContextMenu>
+                        </ListView.ContextMenu>
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn x:Name="ColTime" Header="시간" DisplayMemberBinding="{Binding Time}" Width="70"/>
+                                <GridViewColumn x:Name="ColKey" Header="키값(Hex)" DisplayMemberBinding="{Binding RawKeyHex}" Width="70"/>
+                                <GridViewColumn x:Name="ColData" Header="전체 데이터" DisplayMemberBinding="{Binding Data}" Width="530"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5">
+                        <Button x:Name="BtnAutoDetect" Content="{Binding AutoDetectButtonText}" Command="{Binding StartAutoDetectCommand}" Padding="10,5" Margin="5"/>
+                        <Button x:Name="BtnManualDetect" Content="{Binding ManualDetectButtonText}" Command="{Binding StartManualDetectCommand}" Padding="10,5" Margin="5"/>
+                        <Button x:Name="BtnUnmap" Content="매핑해제" Click="BtnUnmap_Click" Padding="10,5" Margin="5" Command="{Binding UnmapCommand}"/>
+                    </StackPanel>
+                </Grid>
+
+                <GroupBox x:Name="GrpDetailSettings" Header="상세 설정" Visibility="{Binding IsDetailPanelVisible, Converter={StaticResource BooleanToVisibilityConverter}}" Background="#FAFAFA">
+                    <Grid Margin="20">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock x:Name="LblTarget" Text="기능:" VerticalAlignment="Center" Grid.Row="0" Grid.Column="0"/>
+                        <ComboBox x:Name="CboTargetLayer" Grid.Row="0" Grid.Column="1" Margin="0,0,0,10" 
+                                  SelectedValue="{Binding SelectedSlot.TargetLayer, Mode=TwoWay}" 
+                                  SelectedValuePath="Tag"/>
+
+                        <TextBlock x:Name="LblPath" Text="{Binding PathLabelText}" VerticalAlignment="Center" Grid.Row="1" Grid.Column="0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        
+                        <Grid Grid.Row="1" Grid.Column="1" Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="TxtProgramPath" Text="{Binding SelectedSlot.FilePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center"/>
+                            <Button x:Name="BtnBrowse" Content="찾아보기..." Grid.Column="1" Margin="5,0,0,0" Padding="10,2" Command="{Binding BrowseCommand}" Visibility="{Binding SelectedSlot.IsRunMode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        </Grid>
+
+                        <TextBlock x:Name="LblArgs" Text="실행 인수:" VerticalAlignment="Center" Grid.Row="2" Grid.Column="0" Visibility="{Binding SelectedSlot.IsRunMode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        <TextBox x:Name="TxtArguments" Text="{Binding SelectedSlot.Arguments, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Grid.Row="2" Grid.Column="1" Margin="0,0,0,10" VerticalContentAlignment="Center" Visibility="{Binding SelectedSlot.IsRunMode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                        <TextBlock x:Name="LblIcon" Text="아이콘:" VerticalAlignment="Center" Grid.Row="3" Grid.Column="0" Visibility="{Binding SelectedSlot.IsRunMode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        <StackPanel Orientation="Horizontal" Grid.Row="3" Grid.Column="1" Margin="0,0,0,10" Visibility="{Binding SelectedSlot.IsRunMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <Image x:Name="ImgIconPreview" Width="32" Height="32" Margin="0,0,10,0" Source="{Binding SelectedSlot.IconSource}"/>
+                            <Button x:Name="BtnChangeIcon" Content="변경" VerticalAlignment="Center" Padding="10,2" Command="{Binding ChangeIconCommand}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="BtnSavePanel" Content="저장" Padding="20,5" Margin="0,0,10,0" Command="{Binding SavePanelCommand}" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
+                            <Button x:Name="BtnCancelPanel" Content="취소" Padding="20,5" Command="{Binding CancelPanelCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </GroupBox>
+            </Grid>
+
+            <!-- [수정] 키 슬롯 바로 위에 레이어 선택 점 배치 -->
+            <StackPanel Grid.Row="3" HorizontalAlignment="Center" Margin="0,0,0,20">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                    <RadioButton x:Name="RbLayer0" Style="{StaticResource LayerDotStyle}" Tag="0" Checked="RbLayer_Checked" ToolTip="Fn 0"/>
+                    <RadioButton x:Name="RbLayer1" Style="{StaticResource LayerDotStyle}" Tag="1" Checked="RbLayer_Checked" ToolTip="Fn 1"/>
+                    <RadioButton x:Name="RbLayer2" Style="{StaticResource LayerDotStyle}" Tag="2" Checked="RbLayer_Checked" ToolTip="Fn 2"/>
+                    <RadioButton x:Name="RbLayer3" Style="{StaticResource LayerDotStyle}" Tag="3" Checked="RbLayer_Checked" ToolTip="Fn 3"/>
+                    <RadioButton x:Name="RbLayer4" Style="{StaticResource LayerDotStyle}" Tag="4" Checked="RbLayer_Checked" ToolTip="Fn 4"/>
+                </StackPanel>
+
+                <ItemsControl x:Name="GridBadges" ItemsSource="{Binding KeySlots}" HorizontalAlignment="Center" Width="700" Height="140">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Rows="2" Columns="6"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag="{Binding Index}"
+                                 Margin="5"
+                                 TextAlignment="Center"
+                                 VerticalContentAlignment="Center"
+                                 AllowDrop="True"
+                                 GotFocus="TxtSlot_GotFocus"
+                                 LostFocus="TxtSlot_LostFocus"
+                                 KeyDown="TxtSlot_KeyDown"
+                                 PreviewDragOver="TxtSlot_PreviewDragOver"
+                                 PreviewDrop="TxtSlot_PreviewDrop">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="Background" Value="{Binding DisplayColor}"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                    <Setter Property="BorderBrush" Value="Gray"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                            <Setter Property="BorderBrush" Value="#007ACC"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Setter Property="Background" Value="White"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
