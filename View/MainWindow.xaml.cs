@@ -13,6 +13,7 @@ using SayoOSD.ViewModels;
 using SayoOSD.Models;
 using SayoOSD.Managers;
 using SayoOSD.Services; // For InputExecutor constants
+using SayoOSD.Helpers; // [추가] IconHelper
 using SayoOSD.Views;
 
 namespace SayoOSD.Views
@@ -24,6 +25,7 @@ namespace SayoOSD.Views
         private System.Windows.Forms.NotifyIcon _notifyIcon; // 트레이 아이콘
         private System.Windows.Forms.ContextMenuStrip _trayMenu; // [추가] 트레이 메뉴
         private int _selectedSlotIndex = 1; // 현재 선택된 슬롯 (1~12)
+        private int _currentProcessId; // [추가] 현재 프로세스 ID 캐싱
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         extern static bool DestroyIcon(IntPtr handle);
@@ -47,14 +49,18 @@ namespace SayoOSD.Views
         private WinEventDelegate _winEventDelegate; // GC 수집 방지용 델리게이트 참조
         
         private const int ACTION_OSD_CYCLE = 300; // [추가] OSD 모드 순환 상수
+        private const int ACTION_PROFILE_CYCLE = 302; // [추가] 프로필 순환 상수
         private System.Windows.Controls.ScrollViewer _listScrollViewer; // [추가] 로그 리스트 스크롤 뷰어 캐시
         private MainViewModel _viewModel; // [추가] ViewModel
+        private System.Windows.Controls.Expander _expProfiles; // [추가] 프로필 목록 Expander
 
         public MainWindow()
         {
             // [핵심] App 클래스의 정적 생성자를 강제로 실행시켜 중복 검사를 가장 먼저 수행
             // MainWindow가 StartupObject일 경우, InitializeComponent보다 먼저 실행되어야 창이 뜨지 않고 종료됨
             var _ = App.StartupLogs; 
+
+            _currentProcessId = Process.GetCurrentProcess().Id; // [추가] 현재 PID 저장
 
             InitializeComponent();
             _osd = new OsdWindow();
@@ -69,8 +75,20 @@ namespace SayoOSD.Views
             
             // [추가] ViewModel의 OSD 업데이트 요청 처리
             _viewModel.RequestOsdUpdate += () => Dispatcher.Invoke(() => {
-                _osd.UpdateNames(_settings.Buttons, _viewModel.CurrentLayer);
-                _viewModel.LoadKeySlotsForLayer(_viewModel.CurrentLayer);
+                // [수정] 가상 레이어 모드일 때는 가상 프로필 정보로 OSD 갱신
+                if (_viewModel.IsVirtualLayerMode && _viewModel.SelectedAppProfile != null)
+                {
+                    _osd.SetCurrentProfile(_viewModel.SelectedAppProfile); // [추가] 프로필 설정 전달
+                    _osd.UpdateNames(_viewModel.SelectedAppProfile.Buttons, -1);
+                    _viewModel.LoadKeySlotsFromProfile(_viewModel.SelectedAppProfile);
+                }
+                else
+                {
+                    _osd.SetCurrentProfile(null); // [추가] 프로필 해제
+                    _osd.UpdateNames(_settings.Buttons, _viewModel.CurrentLayer);
+                    _viewModel.LoadKeySlotsForLayer(_viewModel.CurrentLayer);
+                }
+                RefreshProfilePalette(); // [추가] OSD 업데이트 시 사이드 메뉴(아이콘)도 갱신
             });
             // [추가] ViewModel의 UI 요청 이벤트 구독
             _viewModel.RequestOsdHighlight += (keyIndex, micState) => _osd.HighlightKey(keyIndex, micState);
@@ -88,6 +106,18 @@ namespace SayoOSD.Views
                 ShowSavedMessage();
                 InputExecutor.GlobalVolumeStep = _settings.VolumeStep; // [추가] 볼륨 설정 동기화
                 UpdateLanguage(); // [수정] 설정(언어) 변경 시 메인 UI 언어도 즉시 갱신
+                this.Resources["PaletteFontSize"] = _settings.PaletteFontSize; // [추가] 폰트 크기 갱신
+                
+                _viewModel.RefreshAppProfiles(); // [추가] 프로필 목록 동기화
+                RefreshProfilePalette(); // [추가] 사이드 메뉴 프로필 목록 갱신
+                
+                // [수정] 설정에 저장된 마지막 상태가 가상 레이어라면 강제로 복구 (사용자 의도 반영)
+                if (!string.IsNullOrEmpty(_settings.LastVirtualProfileName))
+                {
+                    var profile = _viewModel.AppProfiles.FirstOrDefault(p => p.Name == _settings.LastVirtualProfileName);
+                    if (profile != null)
+                        _viewModel.SelectedAppProfile = profile;
+                }
             });
 
             // [추가] InputExecutor 전역 로그 구독 (활성 창 볼륨 조절 등 로그 표시)
@@ -105,6 +135,9 @@ namespace SayoOSD.Views
             // OSD 설정 적용
             _osd.UpdateSettings(_settings);
             InputExecutor.GlobalVolumeStep = _settings.VolumeStep; // [추가] 초기 볼륨 설정 적용
+            
+            // [추가] 기능 팔레트 폰트 크기 적용
+            this.Resources["PaletteFontSize"] = _settings.PaletteFontSize;
 
             // 트레이 아이콘 초기화
             _notifyIcon = new System.Windows.Forms.NotifyIcon();
@@ -172,6 +205,7 @@ namespace SayoOSD.Views
             // UI 콤보박스도 저장된 레이어로 동기화
             UpdateLayerRadioButton(_viewModel.CurrentLayer);
 
+            RefreshProfilePalette(); // [추가] 초기 프로필 팔레트 구성
             this.Loaded += MainWindow_Loaded;
             this.Closing += (s, e) => 
             { 
@@ -253,6 +287,10 @@ namespace SayoOSD.Views
                 try
                 {
                     GetWindowThreadProcessId(hwnd, out uint pid);
+                    
+                    // [추가] 현재 프로세스(SayoOSD)가 활성화된 경우 무시 (설정 중 프로필 변경 방지)
+                    if (pid == (uint)_currentProcessId) return;
+
                     if (pid > 0)
                     {
                         // 프로세스 정보 가져오기
@@ -265,7 +303,7 @@ namespace SayoOSD.Views
                 catch { /* 프로세스 접근 실패 등 예외 무시 */ }
 
                 // [수정] 경로 획득 성공 여부와 관계없이 업데이트 호출 (실패 시 null로 초기화하여 이전 아이콘 잔상 제거)
-                _viewModel.UpdateActiveWindowIcons(path);
+                _viewModel.HandleActiveWindowChange(path);
             }
         }
 
@@ -391,8 +429,18 @@ namespace SayoOSD.Views
 
             if (System.Windows.MessageBox.Show(msg, title, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             {
-                int layer = _viewModel.CurrentLayer;
-                var btn = _settings.Buttons.FirstOrDefault(b => b.Layer == layer && b.Index == slotIndex);
+                // [수정] 가상 레이어 모드인지 확인하여 대상 버튼 결정
+                ButtonConfig btn = null;
+                if (_viewModel.IsVirtualLayerMode && _viewModel.SelectedAppProfile != null)
+                {
+                    btn = _viewModel.SelectedAppProfile.Buttons.FirstOrDefault(b => b.Index == slotIndex);
+                }
+                else
+                {
+                    int layer = _viewModel.CurrentLayer;
+                    btn = _settings.Buttons.FirstOrDefault(b => b.Layer == layer && b.Index == slotIndex);
+                }
+
                 if (btn != null)
                 {
                     // 설정 저장 (이름, 경로, 기능)
@@ -404,14 +452,23 @@ namespace SayoOSD.Views
 
                     // UI 및 OSD 갱신
                     Dispatcher.Invoke(() => {
-                        _osd.UpdateNames(_settings.Buttons, layer);
-                        _viewModel.LoadKeySlotsForLayer(layer); // VM 갱신
+                        if (_viewModel.IsVirtualLayerMode && _viewModel.SelectedAppProfile != null)
+                        {
+                            _osd.UpdateNames(_viewModel.SelectedAppProfile.Buttons, -1);
+                            _viewModel.LoadKeySlotsFromProfile(_viewModel.SelectedAppProfile);
+                        }
+                        else
+                        {
+                            _osd.UpdateNames(_settings.Buttons, _viewModel.CurrentLayer);
+                            _viewModel.LoadKeySlotsForLayer(_viewModel.CurrentLayer); // VM 갱신
+                        }
                     });
                     
                     Log($"[Setting] Key {slotIndex} (Drop) -> Run: {filePath}");
 
                     // 2. 매핑 상태 확인 및 연결 유도
-                    if (string.IsNullOrEmpty(btn.TriggerPattern))
+                    // [수정] 하드웨어 레이어일 때만 매핑 확인 (가상 레이어는 하드웨어 키 매핑에 의존하므로 여기서 설정 불가)
+                    if (!_viewModel.IsVirtualLayerMode && string.IsNullOrEmpty(btn.TriggerPattern))
                     {
                         string msg2 = LanguageManager.GetString(_settings.Language, "MsgNeedMapping");
                         string title2 = LanguageManager.GetString(_settings.Language, "TitleNeedMapping");
@@ -546,13 +603,24 @@ namespace SayoOSD.Views
 
         private void BtnUnmap_Click(object sender, RoutedEventArgs e)
         {
-            int layer = _viewModel.CurrentLayer;
             int slotIndex = _selectedSlotIndex;
+            ButtonConfig btn = null;
+            string layerDisplay = _viewModel.CurrentLayer.ToString();
 
-            var btn = _settings.Buttons.FirstOrDefault(b => b.Layer == layer && b.Index == slotIndex);
+            if (_viewModel.IsVirtualLayerMode && _viewModel.SelectedAppProfile != null)
+            {
+                btn = _viewModel.SelectedAppProfile.Buttons.FirstOrDefault(b => b.Index == slotIndex);
+                layerDisplay = _viewModel.SelectedAppProfile.Name;
+            }
+            else
+            {
+                int layer = _viewModel.CurrentLayer;
+                btn = _settings.Buttons.FirstOrDefault(b => b.Layer == layer && b.Index == slotIndex);
+            }
+
             if (btn != null)
             {
-                string msg = string.Format(LanguageManager.GetString(_settings.Language, "MsgUnmapConfirmDetail"), slotIndex, layer);
+                string msg = string.Format(LanguageManager.GetString(_settings.Language, "MsgUnmapConfirmDetail"), slotIndex, layerDisplay);
                 string title = LanguageManager.GetString(_settings.Language, "TitleUnmap");
 
                 if (System.Windows.MessageBox.Show(msg, title, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
@@ -565,8 +633,16 @@ namespace SayoOSD.Views
 
                     AppSettings.Save(_settings);
 
-                    _osd.UpdateNames(_settings.Buttons, _viewModel.CurrentLayer);
-                    _viewModel.LoadKeySlotsForLayer(_viewModel.CurrentLayer); // VM 갱신
+                    if (_viewModel.IsVirtualLayerMode && _viewModel.SelectedAppProfile != null)
+                    {
+                        _osd.UpdateNames(_viewModel.SelectedAppProfile.Buttons, -1);
+                        _viewModel.LoadKeySlotsFromProfile(_viewModel.SelectedAppProfile);
+                    }
+                    else
+                    {
+                        _osd.UpdateNames(_settings.Buttons, _viewModel.CurrentLayer);
+                        _viewModel.LoadKeySlotsForLayer(_viewModel.CurrentLayer); // VM 갱신
+                    }
                 }
             }
         }
@@ -574,11 +650,24 @@ namespace SayoOSD.Views
         // [추가] 사이드 메뉴 드래그 시작
         private void SideItem_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
+            // 기존 텍스트 기반 메뉴 드래그 처리
             if (e.LeftButton == MouseButtonState.Pressed && sender is FrameworkElement fe && fe.Tag != null)
             {
                 // [수정] 드래그 데이터에 메뉴 이름(Text)도 포함하여 전달
                 string text = (fe as System.Windows.Controls.TextBlock)?.Text ?? "";
                 string data = $"SayoFunc:{fe.Tag}:{text}";
+                DragDrop.DoDragDrop(fe, data, System.Windows.DragDropEffects.Copy);
+            }
+        }
+        
+        // [추가] 프로필 아이템 드래그 시작
+        private void ProfileItem_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed && sender is FrameworkElement fe && fe.Tag is AppProfile profile)
+            {
+                // 프로필 전환 기능 ID: 301
+                // 데이터 포맷: SayoFunc:301:프로필이름
+                string data = $"SayoFunc:301:{profile.Name}";
                 DragDrop.DoDragDrop(fe, data, System.Windows.DragDropEffects.Copy);
             }
         }
@@ -612,12 +701,22 @@ namespace SayoOSD.Views
 
                         if (int.TryParse(tagStr, out int funcId))
                         {
-                            int layer = _viewModel.CurrentLayer;
-                            var btn = _settings.Buttons.FirstOrDefault(b => b.Layer == layer && b.Index == index);
+                            // [수정] 가상 레이어 모드 확인하여 대상 버튼 결정
+                            ButtonConfig btn = null;
+                            if (_viewModel.IsVirtualLayerMode && _viewModel.SelectedAppProfile != null)
+                            {
+                                btn = _viewModel.SelectedAppProfile.Buttons.FirstOrDefault(b => b.Index == index);
+                            }
+                            else
+                            {
+                                int layer = _viewModel.CurrentLayer;
+                                btn = _settings.Buttons.FirstOrDefault(b => b.Layer == layer && b.Index == index);
+                            }
+
                             if (btn != null)
                             {
                                 btn.TargetLayer = funcId;
-                                btn.ProgramPath = null; // 초기화
+                                btn.ProgramPath = null;
                                 btn.IconPath = null;
                                 
                                 // [수정] 드래그한 메뉴의 한글 이름으로 설정 (없으면 기존 로직 폴백)
@@ -636,11 +735,67 @@ namespace SayoOSD.Views
                                     else if (funcId == 200) btn.Name = "Run";
                                     else if (funcId == 201) btn.Name = "Macro";
                                     else if (funcId == 110 || funcId == 111) btn.Name = "Active Vol";
+                                    // [추가] 프로필 전환 기능 처리
+                                    else if (funcId == 301)
+                                    {
+                                        // 드래그 데이터의 이름(프로필명)으로 프로필 찾기
+                                        var profile = _settings.AppProfiles.FirstOrDefault(p => p.Name == nameStr);
+                                        if (profile != null)
+                                        {
+                                            btn.Name = profile.Name;
+                                            // ProgramPath에 프로필 이름을 저장하여 식별
+                                            btn.ProgramPath = profile.Name;
+                                            // 아이콘 경로는 실행 파일 경로 사용 (OSD 표시용)
+                                            btn.IconPath = profile.ExecutablePath;
+                                            Log($"[Setting] Key {index} -> Switch Profile: {profile.Name}");
+                                        }
+                                    }
+                                    // [추가] 프로필 순환 기능 처리
+                                    else if (funcId == 302)
+                                    {
+                                        btn.Name = nameStr;
+                                        btn.TargetLayer = 302;
+                                        btn.ProgramPath = null;
+                                        
+                                        // [수정] OSD에 프로그램 아이콘 표시 (현재 프로필 아이콘 사용)
+                                        AppProfile targetProfile = null;
+                                        if (_viewModel.IsVirtualLayerMode && _viewModel.SelectedAppProfile != null)
+                                        {
+                                            // [수정] 가상 레이어: 현재 프로필 아이콘 사용 (팔레트와 일치)
+                                            targetProfile = _viewModel.SelectedAppProfile;
+                                        }
+                                        else
+                                        {
+                                            // 하드웨어 레이어: 첫 번째 프로필 아이콘 사용
+                                            targetProfile = _settings.AppProfiles.FirstOrDefault();
+                                        }
+
+                                        if (targetProfile != null)
+                                        {
+                                            btn.IconPath = targetProfile.ExecutablePath;
+                                        }
+                                        else
+                                        {
+                                            btn.IconPath = null;
+                                        }
+
+                                        Log($"[Setting] Key {index} -> Cycle Profiles");
+                                    }
                                 }
 
                                 AppSettings.Save(_settings);
-                                _osd.UpdateNames(_settings.Buttons, _viewModel.CurrentLayer);
-                                _viewModel.LoadKeySlotsForLayer(_viewModel.CurrentLayer); // VM 갱신
+                                
+                                // [수정] UI 갱신 로직 분기
+                                if (_viewModel.IsVirtualLayerMode && _viewModel.SelectedAppProfile != null)
+                                {
+                                    _osd.UpdateNames(_viewModel.SelectedAppProfile.Buttons, -1);
+                                    _viewModel.LoadKeySlotsFromProfile(_viewModel.SelectedAppProfile);
+                                }
+                                else
+                                {
+                                    _osd.UpdateNames(_settings.Buttons, _viewModel.CurrentLayer);
+                                    _viewModel.LoadKeySlotsForLayer(_viewModel.CurrentLayer); // VM 갱신
+                                }
                                 
                                 // [수정] 드롭 시점에도 선택 슬롯 갱신 및 패널 표시 여부 결정
                                 _selectedSlotIndex = index;
@@ -725,12 +880,36 @@ namespace SayoOSD.Views
             if (BtnSavePanel != null) BtnSavePanel.Content = LanguageManager.GetString(lang, "BtnSavePanel");
             if (BtnCancelPanel != null) BtnCancelPanel.Content = LanguageManager.GetString(lang, "BtnCancelPanel");
             if (ExpSystem != null) ExpSystem.Header = LanguageManager.GetString(lang, "HeaderSystem");
+            if (_expProfiles != null) _expProfiles.Header = LanguageManager.GetString(lang, "TabProfiles") ?? "App Profiles"; // [추가]
             if (ExpAction != null) ExpAction.Header = LanguageManager.GetString(lang, "HeaderAction");
+            if (ExpMedia != null) ExpMedia.Header = LanguageManager.GetString(lang, "HeaderMedia");
+            if (ExpLayer != null) ExpLayer.Header = LanguageManager.GetString(lang, "HeaderLayerMove");
             if (GrpDetailSettings != null) GrpDetailSettings.Header = LanguageManager.GetString(lang, "BtnOpenSettings"); // "설정" 재사용
             if (LblStatusSaved != null) LblStatusSaved.Text = LanguageManager.GetString(lang, "MsgSaved");
+            if (ChkUseClipboard != null) ChkUseClipboard.Content = LanguageManager.GetString(lang, "ChkUseClipboard");
             
+            // [추가] 기능 팔레트 내부 항목 번역 (XAML에 해당 이름의 컨트롤이 존재할 경우 적용)
+            if (this.FindName("LblRun") is System.Windows.Controls.TextBlock lblRun) lblRun.Text = LanguageManager.GetString(lang, "ActionRun");
+            if (this.FindName("LblTextMacro") is System.Windows.Controls.TextBlock lblTextMacro) lblTextMacro.Text = LanguageManager.GetString(lang, "ActionTextMacro");
+
+            // [추가] 미디어 및 볼륨 제어 명령어 번역
+            if (this.FindName("LblMediaPlayPause") is System.Windows.Controls.TextBlock lblPlay) lblPlay.Text = LanguageManager.GetString(lang, "ActionMediaPlayPause");
+            if (this.FindName("LblMediaNext") is System.Windows.Controls.TextBlock lblNext) lblNext.Text = LanguageManager.GetString(lang, "ActionMediaNext");
+            if (this.FindName("LblMediaPrev") is System.Windows.Controls.TextBlock lblPrev) lblPrev.Text = LanguageManager.GetString(lang, "ActionMediaPrev");
+            if (this.FindName("LblVolUp") is System.Windows.Controls.TextBlock lblVolUp) lblVolUp.Text = LanguageManager.GetString(lang, "ActionVolUp");
+            if (this.FindName("LblVolDown") is System.Windows.Controls.TextBlock lblVolDown) lblVolDown.Text = LanguageManager.GetString(lang, "ActionVolDown");
+            if (this.FindName("LblVolMute") is System.Windows.Controls.TextBlock lblVolMute) lblVolMute.Text = LanguageManager.GetString(lang, "ActionVolMute");
+            if (this.FindName("LblActiveVolUp") is System.Windows.Controls.TextBlock lblActiveVolUp) lblActiveVolUp.Text = LanguageManager.GetString(lang, "ActionActiveVolUp");
+            if (this.FindName("LblActiveVolDown") is System.Windows.Controls.TextBlock lblActiveVolDown) lblActiveVolDown.Text = LanguageManager.GetString(lang, "ActionActiveVolDown");
+            if (this.FindName("LblAudioCycle") is System.Windows.Controls.TextBlock lblAudioCycle) lblAudioCycle.Text = LanguageManager.GetString(lang, "ActionAudioCycle");
+            if (this.FindName("LblOsdCycle") is System.Windows.Controls.TextBlock lblOsdCycle) lblOsdCycle.Text = LanguageManager.GetString(lang, "ActionOsdCycle");
+
+            // [추가] Tag 기반으로 기능 팔레트 아이템 텍스트 일괄 갱신 (x:Name이 없는 경우 대비)
+            UpdatePaletteItems(lang);
+
             if (_viewModel != null) _viewModel.RefreshLocalization();
             UpdateTrayMenu(); // [추가] 트레이 메뉴 언어 업데이트
+            RefreshProfilePalette(); // [추가] 팔레트 텍스트 갱신
         }
 
         private void RefreshTargetLayerList()
@@ -763,7 +942,7 @@ namespace SayoOSD.Views
                 CboTargetLayer.Items.Add(new System.Windows.Controls.Separator());
 
                 // 마이크 & 프로그램
-                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = "Mic Mute (Toggle)", Tag = InputExecutor.LAYER_MIC_MUTE });
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionMicMute"), Tag = InputExecutor.LAYER_MIC_MUTE });
                 CboTargetLayer.Items.Add(new System.Windows.Controls.Separator());
                 CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionRun"), Tag = InputExecutor.ACTION_RUN_PROGRAM });
                 
@@ -772,7 +951,7 @@ namespace SayoOSD.Views
                 
                 // [추가] 기존 상용구 목록 (중복 제거)
                 var existingMacros = _settings.Buttons
-                    .Where(b => b.TargetLayer == InputExecutor.ACTION_TEXT_MACRO && !string.IsNullOrEmpty(b.ProgramPath))
+                    .Where(b => (b.TargetLayer == InputExecutor.ACTION_TEXT_MACRO || b.TargetLayer == InputExecutor.ACTION_TEXT_MACRO_CLIPBOARD) && !string.IsNullOrEmpty(b.ProgramPath))
                     .Select(b => b.ProgramPath)
                     .Distinct()
                     .OrderBy(s => s)
@@ -810,6 +989,9 @@ namespace SayoOSD.Views
                 
                 // [추가] OSD 모드 변경
                 CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionOsdCycle"), Tag = ACTION_OSD_CYCLE });
+                
+                // [추가] 프로필 순환
+                CboTargetLayer.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = LanguageManager.GetString(lang, "ActionProfileCycle") ?? "Cycle Profiles", Tag = ACTION_PROFILE_CYCLE });
             }
             catch (Exception ex)
             {
@@ -831,7 +1013,7 @@ namespace SayoOSD.Views
                     // 해당 매크로를 사용하는 모든 버튼 찾아서 초기화
                     foreach (var btn in _settings.Buttons)
                     {
-                        if (btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO && btn.ProgramPath == macro)
+                        if ((btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO || btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO_CLIPBOARD) && btn.ProgramPath == macro)
                         {
                             btn.TargetLayer = -1;
                             btn.ProgramPath = null;
@@ -926,6 +1108,177 @@ namespace SayoOSD.Views
             };
 
             _notifyIcon.ContextMenuStrip = _trayMenu;
+        }
+
+        // [수정] 사이드 메뉴에 프로필 순환 버튼 생성 (개별 목록 제거)
+        private void RefreshProfilePalette()
+        {
+            // ExpAction(기능) Expander가 있는 부모 패널 찾기
+            if (ExpAction == null || !(ExpAction.Parent is System.Windows.Controls.Panel parentPanel)) return;
+
+            // 이미 생성된 Expander가 있다면 제거 (갱신)
+            if (_expProfiles != null && parentPanel.Children.Contains(_expProfiles))
+            {
+                parentPanel.Children.Remove(_expProfiles);
+            }
+
+            // 프로필이 없으면 생성하지 않음 (순환할 대상이 없음)
+            if (_settings.AppProfiles.Count == 0) return;
+
+            // 새 Expander 생성
+            _expProfiles = new System.Windows.Controls.Expander
+            {
+                Header = LanguageManager.GetString(_settings.Language, "TabProfiles") ?? "App Profiles",
+                IsExpanded = true,
+                Margin = new Thickness(0, 5, 0, 0),
+                BorderBrush = System.Windows.Media.Brushes.LightGray,
+                BorderThickness = new Thickness(1)
+            };
+
+            var stackPanel = new System.Windows.Controls.StackPanel { Margin = new Thickness(5) };
+
+            // [수정] 개별 프로필 리스트 대신 '프로필 순환' 버튼 하나만 추가
+            var itemPanel = new System.Windows.Controls.StackPanel 
+            { 
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                Margin = new Thickness(0, 2, 0, 2),
+                Background = System.Windows.Media.Brushes.Transparent, // 히트 테스트용
+                Tag = ACTION_PROFILE_CYCLE // 302
+            };
+            itemPanel.MouseMove += SideItem_MouseMove; // 일반 기능 드래그 핸들러 사용
+
+            // [추가] 아이콘 표시 (현재 활성화된 프로필 또는 대표 아이콘)
+            var img = new System.Windows.Controls.Image { Width = 16, Height = 16, Margin = new Thickness(0, 0, 5, 0) };
+            string iconPath = null;
+
+            if (_viewModel.IsVirtualLayerMode && _viewModel.SelectedAppProfile != null)
+            {
+                iconPath = _viewModel.SelectedAppProfile.ExecutablePath;
+            }
+            else if (_settings.AppProfiles.Count > 0)
+            {
+                // 하드웨어 모드일 때는 첫 번째 프로필 아이콘을 대표로 표시
+                iconPath = _settings.AppProfiles[0].ExecutablePath;
+            }
+
+            if (!string.IsNullOrEmpty(iconPath) && System.IO.File.Exists(iconPath))
+            {
+                img.Source = IconHelper.GetIconFromPath(iconPath);
+            }
+            else
+            {
+                img.Visibility = Visibility.Collapsed;
+            }
+
+            itemPanel.Children.Add(img);
+
+            var txt = new System.Windows.Controls.TextBlock { 
+                Text = LanguageManager.GetString(_settings.Language, "ActionProfileCycle") ?? "Cycle Profiles", 
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(2, 0, 0, 0)
+            };
+
+            itemPanel.Children.Add(txt);
+            stackPanel.Children.Add(itemPanel);
+
+            _expProfiles.Content = stackPanel;
+            // ExpAction 다음에 추가 (순서: 시스템 -> 기능 -> 프로필)
+            parentPanel.Children.Insert(parentPanel.Children.IndexOf(ExpAction) + 1, _expProfiles);
+        }
+
+        // [추가] 기능 팔레트 아이템 텍스트 갱신 (Tag 기반)
+        private void UpdatePaletteItems(string lang)
+        {
+            UpdateContainerItems(ExpAction, lang);
+            UpdateContainerItems(ExpSystem, lang);
+            UpdateContainerItems(ExpMedia, lang); // [추가] 미디어 제어 그룹 번역 적용
+            UpdateContainerItems(ExpLayer, lang); // [추가] 레이어 이동 그룹 번역 적용
+        }
+
+        private void UpdateContainerItems(System.Windows.Controls.ContentControl container, string lang)
+        {
+            if (container == null || container.Content == null) return;
+
+            if (container.Content is System.Windows.Controls.Panel panel)
+            {
+                foreach (UIElement child in panel.Children) UpdateItemTextRecursively(child, lang);
+            }
+            else if (container.Content is System.Windows.Controls.ScrollViewer sv && sv.Content is System.Windows.Controls.Panel svPanel)
+            {
+                foreach (UIElement child in svPanel.Children) UpdateItemTextRecursively(child, lang);
+            }
+        }
+
+        private void UpdateItemTextRecursively(UIElement element, string lang)
+        {
+            if (element is FrameworkElement fe && fe.Tag != null)
+            {
+                string key = GetLangKeyFromTag(fe.Tag.ToString());
+                if (!string.IsNullOrEmpty(key))
+                {
+                    // [수정] 요소 자체가 TextBlock인 경우 직접 처리 (FindVisualChild는 자식만 검색하므로 실패함)
+                    if (fe is System.Windows.Controls.TextBlock tb)
+                    {
+                        tb.Text = LanguageManager.GetString(lang, key);
+                    }
+                    else
+                    {
+                        var textBlock = FindVisualChild<System.Windows.Controls.TextBlock>(fe);
+                        if (textBlock != null) textBlock.Text = LanguageManager.GetString(lang, key);
+                    }
+                }
+            }
+
+            if (element is System.Windows.Controls.Panel panel)
+            {
+                foreach (UIElement child in panel.Children) UpdateItemTextRecursively(child, lang);
+            }
+            else if (element is System.Windows.Controls.ContentControl cc && cc.Content is UIElement content)
+            {
+                UpdateItemTextRecursively(content, lang);
+            }
+            else if (element is System.Windows.Controls.Border border && border.Child is UIElement child)
+            {
+                UpdateItemTextRecursively(child, lang);
+            }
+        }
+
+        private string GetLangKeyFromTag(string tag)
+        {
+            if (int.TryParse(tag, out int id))
+            {
+                switch (id)
+                {
+                    case InputExecutor.ACTION_MEDIA_PLAYPAUSE: return "ActionMediaPlayPause";
+                    case InputExecutor.ACTION_MEDIA_NEXT: return "ActionMediaNext";
+                    case InputExecutor.ACTION_MEDIA_PREV: return "ActionMediaPrev";
+                    case InputExecutor.ACTION_VOL_UP: return "ActionVolUp";
+                    case InputExecutor.ACTION_VOL_DOWN: return "ActionVolDown";
+                    case InputExecutor.ACTION_VOL_MUTE: return "ActionVolMute";
+                    case InputExecutor.ACTION_ACTIVE_VOL_UP: return "ActionActiveVolUp";
+                    case InputExecutor.ACTION_ACTIVE_VOL_DOWN: return "ActionActiveVolDown";
+                    case InputExecutor.ACTION_RUN_PROGRAM: return "ActionRun";
+                    case InputExecutor.ACTION_TEXT_MACRO: return "ActionTextMacro";
+                    case InputExecutor.ACTION_TEXT_MACRO_CLIPBOARD: return "ChkUseClipboard"; // [추가] 클립보드 매크로
+                    case InputExecutor.ACTION_AUDIO_CYCLE: return "ActionAudioCycle";
+                    case ACTION_OSD_CYCLE: return "ActionOsdCycle";
+                    case InputExecutor.LAYER_MIC_MUTE: return "ActionMicMute";
+                    case ACTION_PROFILE_CYCLE: return "ActionProfileCycle"; // [추가] 프로필 순환
+                }
+            }
+            return null;
+        }
+
+        private T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T result) return result;
+                var descendant = FindVisualChild<T>(child);
+                if (descendant != null) return descendant;
+            }
+            return null;
         }
     }
 }

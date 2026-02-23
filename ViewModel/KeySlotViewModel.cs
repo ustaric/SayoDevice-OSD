@@ -5,6 +5,7 @@ using System.Windows.Media.Imaging; // For ImageSource
 using SayoOSD.Models;
 using SayoOSD.Helpers;
 using SayoOSD.ViewModels;
+using SayoOSD.Services; // InputExecutor
 
 namespace SayoOSD.ViewModels
 {
@@ -116,6 +117,7 @@ namespace SayoOSD.ViewModels
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsRunMode));
                     OnPropertyChanged(nameof(IsMacroMode));
+                    OnPropertyChanged(nameof(UseClipboard)); // [추가]
                     UpdateColor();
                 }
             }
@@ -124,12 +126,27 @@ namespace SayoOSD.ViewModels
         /// <summary>
         /// 프로그램 실행 모드 여부 (UI 바인딩용)
         /// </summary>
-        public bool IsRunMode => _config.TargetLayer == 200; // InputExecutor.ACTION_RUN_PROGRAM
+        public bool IsRunMode => _config.TargetLayer == InputExecutor.ACTION_RUN_PROGRAM;
 
         /// <summary>
         /// 텍스트 매크로 모드 여부 (UI 바인딩용)
         /// </summary>
-        public bool IsMacroMode => _config.TargetLayer == 201; // InputExecutor.ACTION_TEXT_MACRO
+        public bool IsMacroMode => _config.TargetLayer == InputExecutor.ACTION_TEXT_MACRO || _config.TargetLayer == InputExecutor.ACTION_TEXT_MACRO_CLIPBOARD;
+
+        /// <summary>
+        /// [추가] 매크로 입력 시 클립보드 사용 여부
+        /// </summary>
+        public bool UseClipboard
+        {
+            get => _config.TargetLayer == InputExecutor.ACTION_TEXT_MACRO_CLIPBOARD;
+            set
+            {
+                if (IsMacroMode && UseClipboard != value)
+                {
+                    TargetLayer = value ? InputExecutor.ACTION_TEXT_MACRO_CLIPBOARD : InputExecutor.ACTION_TEXT_MACRO;
+                }
+            }
+        }
 
         /// <summary>
         /// 실행할 프로그램 경로 (전체 경로 + 인수)

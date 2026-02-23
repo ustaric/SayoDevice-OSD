@@ -20,9 +20,56 @@ namespace SayoOSD.Helpers
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool DestroyIcon(IntPtr hIcon);
 
+        // [추가] 경로 자동 보정 메서드 (버전 폴더 변경 대응)
+        public static string ResolvePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            if (System.IO.File.Exists(path)) return path;
+
+            try
+            {
+                var fileInfo = new System.IO.FileInfo(path);
+                var dir = fileInfo.Directory;
+
+                // 디렉토리가 없으면 상위 디렉토리에서 검색
+                // 예: .../Discord/app-1.0.9224/Discord.exe -> .../Discord/app-1.0.9225/Discord.exe
+                if (dir != null && !dir.Exists && dir.Parent != null && dir.Parent.Exists)
+                {
+                    string fileName = fileInfo.Name;
+                    string dirName = dir.Name;
+                    System.IO.DirectoryInfo[] subDirs;
+
+                    // "app-"로 시작하는 폴더였던 경우 (Discord 패턴)
+                    if (dirName.StartsWith("app-", StringComparison.OrdinalIgnoreCase))
+                        subDirs = dir.Parent.GetDirectories("app-*");
+                    else
+                        subDirs = dir.Parent.GetDirectories();
+
+                    // 생성 시간 내림차순 정렬 (최신 폴더 우선)
+                    var sortedDirs = subDirs.OrderByDescending(d => d.CreationTime);
+
+                    foreach (var subDir in sortedDirs)
+                    {
+                        string newPath = System.IO.Path.Combine(subDir.FullName, fileName);
+                        if (System.IO.File.Exists(newPath)) return newPath;
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
         public static ImageSource GetIconFromPath(string path, Action<string> logger = null)
         {
-            if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return null;
+            if (string.IsNullOrEmpty(path)) return null;
+
+            // [수정] 파일이 없으면 경로 보정 시도
+            if (!System.IO.File.Exists(path))
+            {
+                string resolved = ResolvePath(path);
+                if (resolved != null) path = resolved;
+                else return null;
+            }
 
             // 1. [신규] EXE/DLL에서 고해상도(256x256) 아이콘 추출 시도 (PrivateExtractIcons)
             try

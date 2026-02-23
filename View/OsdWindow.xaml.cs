@@ -30,8 +30,12 @@ namespace SayoOSD.Views
         private int _currentLayer = 0; // 현재 레이어
         private bool? _isMicMuted = null; // 마이크 상태
         private bool? _isSpeakerMuted = null; // 스피커 상태
+        private List<ButtonConfig> _currentConfigs; // [추가] 현재 표시 중인 버튼 설정 목록
+        private AppProfile _currentProfile; // [추가] 현재 활성화된 프로필 (없으면 null)
+        private int _highlightedKeyIndex = -1; // [추가] 현재 하이라이트 중인 키 인덱스 추적
         public event Action<string> DebugLog; // 로그 전달 이벤트
         public event Action<int, string> OnFileDrop; // [추가] 파일 드롭 이벤트
+        private bool _isUpdatingLocation = false; // [추가] 코드로 위치 변경 중인지 확인하는 플래그
 
         // [추가] 관리자 권한 실행 시 드래그 앤 드롭 허용을 위한 API
         [DllImport("user32.dll")]
@@ -114,12 +118,43 @@ namespace SayoOSD.Views
             _holdTimer.Tick += HoldTimer_Tick;
 
             // 마우스 드래그 이동 기능
-            this.MouseLeftButtonDown += (s, e) => { this.DragMove(); };
+            this.MouseLeftButtonDown += (s, e) => 
+            { 
+                try
+                {
+                    this.DragMove();
+                    
+                    // [수정] 드래그 종료 후 명시적으로 위치 업데이트 (상하 위치 누락 방지)
+                    if (_currentProfile != null)
+                    {
+                        _currentProfile.CustomOsdTop = this.Top;
+                        _currentProfile.CustomOsdLeft = this.Left;
+                    }
+                    else if (_currentSettings != null)
+                    {
+                        _currentSettings.OsdTop = this.Top;
+                        _currentSettings.OsdLeft = this.Left;
+                    }
+
+                    if (_currentSettings != null)
+                        AppSettings.Save(_currentSettings);
+                }
+                catch { /* 드래그 시작 실패 등 예외 무시 */ }
+            };
             
             // 위치 변경 시 설정 업데이트
             this.LocationChanged += (s, e) => 
             {
-                if (_currentSettings != null)
+                // [수정] 코드로 위치를 변경하는 중(프로필 전환 등)에는 설정을 덮어쓰지 않음
+                if (_isUpdatingLocation) return;
+
+                // [수정] 프로필 모드일 경우 프로필에 위치 저장, 아니면 전역 설정에 저장
+                if (_currentProfile != null)
+                {
+                    _currentProfile.CustomOsdTop = this.Top;
+                    _currentProfile.CustomOsdLeft = this.Left;
+                }
+                else if (_currentSettings != null)
                 {
                     _currentSettings.OsdTop = this.Top;
                     _currentSettings.OsdLeft = this.Left;
@@ -173,6 +208,7 @@ namespace SayoOSD.Views
         private void HoldTimer_Tick(object sender, EventArgs e)
         {
             _holdTimer.Stop();
+            _highlightedKeyIndex = -1; // [추가] 하이라이트 종료 상태 기록
             
             // 하이라이트(노란 테두리) 제거 및 상태 색상 복구 (공통)
             RefreshAllSlotsBackground();
@@ -253,6 +289,31 @@ namespace SayoOSD.Views
             if (this.Height > 0) _aspectRatio = this.Width / this.Height;
         }
 
+        // [추가] 현재 프로필 설정 및 위치 복원
+        public void SetCurrentProfile(AppProfile profile)
+        {
+            _isUpdatingLocation = true; // [추가] 위치 변경 시작 (이벤트 무시)
+            try
+            {
+                _currentProfile = profile;
+
+                if (_currentProfile != null && _currentProfile.CustomOsdLeft.HasValue && _currentProfile.CustomOsdTop.HasValue)
+                {
+                    this.Left = _currentProfile.CustomOsdLeft.Value;
+                    this.Top = _currentProfile.CustomOsdTop.Value;
+                }
+                else if (_currentSettings != null && _currentSettings.OsdLeft != -1 && _currentSettings.OsdTop != -1)
+                {
+                    this.Left = _currentSettings.OsdLeft;
+                    this.Top = _currentSettings.OsdTop;
+                }
+            }
+            finally
+            {
+                _isUpdatingLocation = false; // [추가] 위치 변경 종료
+            }
+        }
+
         public void UpdateSettings(AppSettings settings)
         {
             _currentSettings = settings;
@@ -261,11 +322,25 @@ namespace SayoOSD.Views
             DebugLog?.Invoke($"[OSD] UpdateSettings: Mode={_osdMode}, Opacity={this.Opacity}");
 
             // 저장된 위치가 유효하면 복원
-            if (settings.OsdTop != -1 && settings.OsdLeft != -1)
+            _isUpdatingLocation = true; // [추가] 위치 복원 중 이벤트 무시
+            try
             {
-                this.Top = settings.OsdTop;
-                this.Left = settings.OsdLeft;
+                if (settings.OsdTop != -1 && settings.OsdLeft != -1)
+                {
+                    // [수정] 프로필 모드이고 프로필 위치가 설정되어 있다면 전역 위치로 덮어쓰지 않음
+                    bool useProfilePos = _currentProfile != null && _currentProfile.CustomOsdTop.HasValue && _currentProfile.CustomOsdLeft.HasValue;
+                    if (!useProfilePos)
+                    {
+                        this.Top = settings.OsdTop;
+                        this.Left = settings.OsdLeft;
+                    }
+                }
             }
+            finally
+            {
+                _isUpdatingLocation = false;
+            }
+
             // 저장된 크기가 유효하면 복원
             if (settings.OsdWidth > 0 && settings.OsdHeight > 0)
             {
@@ -285,6 +360,9 @@ namespace SayoOSD.Views
 
             // 배경색 즉시 적용 (설정 변경 시 미리보기)
             RefreshAllSlotsBackground();
+
+            // [추가] 폰트 설정 적용
+            RefreshAllSlotsFont();
 
             UpdateNames(settings.Buttons, settings.LastLayerIndex); // 저장된 마지막 레이어 표시
 
@@ -386,6 +464,7 @@ namespace SayoOSD.Views
 
         public void UpdateNames(List<ButtonConfig> configs, int layer)
         {
+            _currentConfigs = configs; // [추가] 현재 버튼 목록 저장 (가상/하드웨어 구분 없이 사용)
             _currentLayer = layer;
             foreach (var cfg in configs)
             {
@@ -396,6 +475,7 @@ namespace SayoOSD.Views
                 }
             }
             RefreshAllSlotsBackground();
+            RefreshAllSlotsFont(); // [추가] 레이어 변경 시 폰트도 갱신 (레이어별 폰트 지원)
         }
 
         public void SetMicState(bool isMuted)
@@ -444,14 +524,57 @@ namespace SayoOSD.Views
                 }
             }
 
+            // [수정] 파일이 존재하지 않을 경우 경로 보정 시도 및 설정 자동 업데이트
+            string finalPath = targetPath;
+            bool pathChanged = false;
+
+            if (!string.IsNullOrEmpty(finalPath) && !System.IO.File.Exists(finalPath))
+            {
+                string resolved = IconHelper.ResolvePath(finalPath);
+                if (resolved != null)
+                {
+                    finalPath = resolved;
+                    pathChanged = true;
+                }
+            }
+
+            // 경로가 변경되었다면 설정 파일(settings.json) 자동 업데이트
+            if (pathChanged && _currentSettings != null)
+            {
+                var btn = _currentSettings.Buttons.Find(b => b.Layer == _currentLayer && b.Index == index + 1);
+                if (btn != null)
+                {
+                    bool saved = false;
+                    // 1. 아이콘 경로가 변경된 경우
+                    if (!string.IsNullOrEmpty(btn.IconPath) && !System.IO.File.Exists(btn.IconPath))
+                    {
+                        btn.IconPath = finalPath;
+                        saved = true;
+                    }
+                    // 2. 프로그램 경로가 변경된 경우 (인수 유지 로직 필요)
+                    else if (!string.IsNullOrEmpty(btn.ProgramPath))
+                    {
+                        // 기존 경로(targetPath)를 새 경로(finalPath)로 교체
+                        // 단순 Replace는 위험하므로, 앞부분이 일치하는지 확인 후 교체
+                        if (btn.ProgramPath.Contains(targetPath))
+                        {
+                            btn.ProgramPath = btn.ProgramPath.Replace(targetPath, finalPath);
+                            saved = true;
+                        }
+                    }
+
+                    if (saved) AppSettings.Save(_currentSettings);
+                }
+            }
+
             ImageSource icon = null;
             // 파일이 존재할 때만 아이콘 추출 시도 (.exe, .ico, .dll 등)
-            if (!string.IsNullOrEmpty(targetPath) && System.IO.File.Exists(targetPath))
+            if (!string.IsNullOrEmpty(finalPath) && System.IO.File.Exists(finalPath))
             {
-                if (!_iconCache.TryGetValue(targetPath, out icon))
+                if (!_iconCache.TryGetValue(finalPath, out icon))
                 {
-                    icon = IconHelper.GetIconFromPath(targetPath, (msg) => DebugLog?.Invoke($"[Icon] {msg}"));
-                    if (icon != null) _iconCache[targetPath] = icon;
+                    icon = IconHelper.GetIconFromPath(finalPath, (msg) => DebugLog?.Invoke($"[Icon] {msg}"));
+                    if (icon != null) _iconCache[finalPath] = icon;
                 }
             }
 
@@ -472,21 +595,86 @@ namespace SayoOSD.Views
             }
         }
 
+        // [추가] Hex 색상 문자열을 Brush로 변환하는 헬퍼
+        private SolidColorBrush GetBrushFromHex(string hex, string fallbackHex = "#00000000")
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(hex)) hex = fallbackHex;
+                var brush = (SolidColorBrush)new BrushConverter().ConvertFrom(hex);
+                return brush;
+            }
+            catch
+            {
+                try { return (SolidColorBrush)new BrushConverter().ConvertFrom(fallbackHex); }
+                catch { return System.Windows.Media.Brushes.Transparent; }
+            }
+        }
+
         private void RefreshAllSlotsBackground()
         {
             for (int i = 1; i <= 12; i++) UpdateSlotBackground(i);
         }
 
+        // [추가] 모든 슬롯의 폰트 스타일 갱신
+        private void RefreshAllSlotsFont()
+        {
+            if (_texts == null) return;
+
+            // 1. 기본값 (전역 설정)
+            string familyName = _currentSettings?.OsdFontFamily ?? "Segoe UI";
+            double size = _currentSettings?.OsdFontSize ?? 20.0;
+            string weightStr = _currentSettings?.OsdFontWeight ?? "Normal";
+
+            // 2. 레이어별 설정 (오버라이드)
+            if (_currentSettings != null && _currentLayer >= 0 && _currentSettings.LayerStyles.Count > _currentLayer)
+            {
+                var style = _currentSettings.LayerStyles[_currentLayer];
+                if (!string.IsNullOrEmpty(style.FontFamily)) familyName = style.FontFamily;
+                if (style.FontSize.HasValue) size = style.FontSize.Value;
+                if (!string.IsNullOrEmpty(style.FontWeight)) weightStr = style.FontWeight;
+            }
+
+            // 3. 프로필별 설정 (최우선 오버라이드)
+            if (_currentProfile != null)
+            {
+                if (!string.IsNullOrEmpty(_currentProfile.CustomOsdFontFamily)) familyName = _currentProfile.CustomOsdFontFamily;
+                if (_currentProfile.CustomOsdFontSize.HasValue) size = _currentProfile.CustomOsdFontSize.Value;
+                if (!string.IsNullOrEmpty(_currentProfile.CustomOsdFontWeight)) weightStr = _currentProfile.CustomOsdFontWeight;
+            }
+
+            try
+            {
+                var family = new System.Windows.Media.FontFamily(familyName);
+                var weight = (FontWeight)new FontWeightConverter().ConvertFromString(weightStr);
+
+                foreach (var txt in _texts)
+                {
+                    if (txt != null)
+                    {
+                        txt.FontFamily = family;
+                        txt.FontSize = size;
+                        txt.FontWeight = weight;
+                    }
+                }
+            }
+            catch { /* 폰트 변환 실패 시 무시 */ }
+        }
+
         private void UpdateSlotBackground(int keyIndex)
         {
             if (keyIndex < 1 || keyIndex > 12) return;
+            
+            // [추가] 현재 하이라이트 중인 키라면 배경색 초기화를 건너뛰어 시각 효과 유지
+            if (keyIndex == _highlightedKeyIndex) return;
+
             var slot = _slots[keyIndex - 1];
 
             bool isMicKey = false;
             bool isSpeakerKey = false;
-            if (_currentSettings != null)
+            if (_currentConfigs != null) // [수정] _currentSettings.Buttons 대신 현재 표시 중인 _currentConfigs 사용
             {
-                var btn = _currentSettings.Buttons.Find(b => b.Layer == _currentLayer && b.Index == keyIndex);
+                var btn = _currentConfigs.Find(b => b.Layer == _currentLayer && b.Index == keyIndex);
                 if (btn != null)
                 {
                     if (btn.TargetLayer == 99) isMicKey = true;
@@ -512,8 +700,17 @@ namespace SayoOSD.Views
             }
             else
             {
-                byte bgAlpha = _currentSettings != null ? (byte)_currentSettings.OsdBackgroundAlpha : (byte)50;
-                slot.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(bgAlpha, 0xFF, 0xFF, 0xFF));
+                // [수정] 설정된 배경색 적용 (프로필 -> 레이어 -> 전역 -> 기본값)
+                string colorHex = _currentProfile?.CustomOsdBackgroundColor;
+                
+                // 프로필 색상이 없고 레이어별 색상이 설정되어 있다면 적용
+                if (string.IsNullOrEmpty(colorHex) && _currentSettings != null && _currentLayer >= 0 && _currentSettings.LayerStyles.Count > _currentLayer)
+                    colorHex = _currentSettings.LayerStyles[_currentLayer].BackgroundColor;
+
+                if (string.IsNullOrEmpty(colorHex) && _currentSettings != null)
+                    colorHex = _currentSettings.OsdBackgroundColor;
+                
+                slot.Background = GetBrushFromHex(colorHex, "#32FFFFFF");
             }
             slot.BorderBrush = System.Windows.Media.Brushes.Transparent;
             slot.BorderThickness = new Thickness(0);
@@ -533,19 +730,21 @@ namespace SayoOSD.Views
             if (isMicMuted.HasValue) _isMicMuted = isMicMuted;
 
             // 모든 슬롯 초기화
+            _highlightedKeyIndex = -1; // [추가] 초기화 전 인덱스 리셋하여 모든 배경을 지움
             RefreshAllSlotsBackground();
 
             // 해당 키 하이라이트
             if (keyIndex >= 1 && keyIndex <= 12)
             {
                 var target = _slots[keyIndex - 1];
+                _highlightedKeyIndex = keyIndex; // [추가] 하이라이트 중인 키 인덱스 저장
 
                 // 마이크 키인지 확인
                 bool isMicKey = false;
                 bool isSpeakerKey = false;
-                if (_currentSettings != null)
+                if (_currentConfigs != null) // [수정] 현재 표시 중인 버튼 목록에서 검색
                 {
-                    var btn = _currentSettings.Buttons.Find(b => b.Layer == _currentLayer && b.Index == keyIndex);
+                    var btn = _currentConfigs.Find(b => b.Layer == _currentLayer && b.Index == keyIndex);
                     if (btn != null)
                     {
                         if (btn.TargetLayer == 99) isMicKey = true;
@@ -569,9 +768,28 @@ namespace SayoOSD.Views
                 }
                 else
                 {
-                    target.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC)); // 기본: 파란색 강조
+                    // [수정] 설정된 하이라이트 색상 적용 (프로필 -> 레이어 -> 전역)
+                    string highlightHex = _currentProfile?.CustomOsdHighlightColor;
+                    
+                    if (string.IsNullOrEmpty(highlightHex) && _currentSettings != null && _currentLayer >= 0 && _currentSettings.LayerStyles.Count > _currentLayer)
+                        highlightHex = _currentSettings.LayerStyles[_currentLayer].HighlightColor;
+
+                    if (string.IsNullOrEmpty(highlightHex) && _currentSettings != null)
+                        highlightHex = _currentSettings.OsdHighlightColor;
+
+                    target.Background = GetBrushFromHex(highlightHex, "#FF007ACC");
                 }
-                target.BorderBrush = System.Windows.Media.Brushes.Yellow;
+                
+                // [수정] 설정된 테두리 색상 적용
+                string borderHex = _currentProfile?.CustomOsdBorderColor;
+
+                if (string.IsNullOrEmpty(borderHex) && _currentSettings != null && _currentLayer >= 0 && _currentSettings.LayerStyles.Count > _currentLayer)
+                    borderHex = _currentSettings.LayerStyles[_currentLayer].BorderColor;
+
+                if (string.IsNullOrEmpty(borderHex) && _currentSettings != null)
+                    borderHex = _currentSettings.OsdBorderColor;
+
+                target.BorderBrush = GetBrushFromHex(borderHex, "#FFFFFF00");
                 target.BorderThickness = new Thickness(2);
             }
             
@@ -636,9 +854,19 @@ namespace SayoOSD.Views
             // 복구 로컬 함수
             void RestoreState()
             {
-                if (_currentSettings != null)
+                // [수정] 현재 로드된 설정(_currentConfigs)을 사용하여 복구
+                // 가상 레이어(-1)일 때 하드웨어 버튼(0~4)만 있는 _currentSettings를 쓰면 매칭 실패로 텍스트가 갱신되지 않아 피드백 텍스트가 남는 문제 해결
+                if (_currentConfigs != null)
+                {
+                    UpdateNames(_currentConfigs, _currentLayer);
+                }
+                else if (_currentSettings != null)
                 {
                     UpdateNames(_currentSettings.Buttons, _currentLayer);
+                }
+
+                if (_currentSettings != null)
+                {
                     this.Opacity = _currentSettings.OsdOpacity; // 투명도 복구
                 }
                 // Auto 모드면 숨김

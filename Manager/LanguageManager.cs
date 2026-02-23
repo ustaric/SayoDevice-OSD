@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Windows;
 using SayoOSD.Managers;
 
 namespace SayoOSD.Managers
@@ -24,11 +25,13 @@ namespace SayoOSD.Managers
 
     public class LocalizationData
     {
+        public int Version { get; set; } = 0;
         public List<LanguageProfile> Languages { get; set; } = new List<LanguageProfile>();
     }
 
     public static class LanguageManager
     {
+        public const int CurrentVersion = 2; // [수정] 버전 증가 (기존 파일 강제 갱신 유도)
         private static LocalizationData _data;
         private static string _filePath = Path.Combine(AppContext.BaseDirectory, "languages.json");
         
@@ -61,7 +64,21 @@ namespace SayoOSD.Managers
             "GrpFunctions", "LblPath", "LblArgs", "LblIcon", "BtnBrowse", "BtnChange", 
             "BtnSavePanel", "BtnCancelPanel", "HeaderSystem", "HeaderAction",
             "MsgPatternMappedDetail", "MsgConfirmRunProgram", "TitleRunProgram", "MsgNeedMapping", "TitleNeedMapping",
-            "MsgUnmapConfirmDetail", "MsgStartupRegistered", "TitleStartupRegistered", "MsgStartupFailed"
+            "MsgUnmapConfirmDetail", "MsgStartupRegistered", "TitleStartupRegistered", "MsgStartupFailed",
+            "ChkUseClipboard", // [추가]
+            "TabGeneral", "TabProfiles", "ActionProfileCycle",
+            "MsgLanguageUpdated",
+            "BtnAddProfile", "BtnDeleteProfile", "BtnExportProfile", "BtnImportProfile",
+            "MsgProcessExists", "MsgDeleteProfileConfirm", "TitleDeleteProfile",
+            "TitleExportProfile", "MsgExportSuccess", "TitleExportSuccess", "MsgExportFailed", "TitleError", "MsgSelectProfile",
+            "TitleImportProfile", "MsgInvalidProfile", "MsgProfileExists", "TitleDuplicate", "MsgImportSuccess", "TitleImportSuccess", "MsgImportFailed",
+            "MsgResetColorConfirm", "TitleResetColor",
+            "GrpColor", "GrpFont", "LblTargetSettings", "ItemGlobal",
+            "BtnBgColor", "BtnHighlightColor", "BtnBorderColor", "BtnResetColor", "BtnResetFont",
+            "LblFallbackProfile", "LblFontFamily", "LblFontSize", "LblFontWeight",
+            "ChkEnableAppProfiles", "HeaderProfileName", "HeaderProcessName",
+            "ActionMicMute",
+            "LblPaletteFontSize"
         };
 
         public static void Load()
@@ -78,6 +95,7 @@ namespace SayoOSD.Managers
 
             // 기본값 데이터 생성 (코드에 정의된 최신 데이터)
             var defaults = GetDefaultData();
+            bool versionUpdated = false;
 
             if (_data == null)
             {
@@ -87,6 +105,20 @@ namespace SayoOSD.Managers
             else
             {
                 // 기존 파일이 있더라도, 코드에 새로 추가된 키나 언어가 누락되어 있다면 병합합니다.
+                // 버전 확인 및 백업
+                if (_data.Version < CurrentVersion)
+                {
+                    try
+                    {
+                        string backupPath = _filePath + ".bak";
+                        File.Copy(_filePath, backupPath, true);
+                    }
+                    catch { /* 백업 실패 시 무시 */ }
+
+                    _data.Version = CurrentVersion;
+                    versionUpdated = true;
+                }
+
                 bool changed = false;
                 var defaultEn = defaults.Languages.FirstOrDefault(l => l.Code == "EN");
 
@@ -156,7 +188,14 @@ namespace SayoOSD.Managers
                     }
                 }
 
-                if (changed) Save();
+                if (changed || versionUpdated) Save();
+
+                if (versionUpdated)
+                {
+                    // 업데이트 알림 (기본 한국어 메시지 사용)
+                    string msg = GetString("KO", "MsgLanguageUpdated");
+                    System.Windows.MessageBox.Show(msg, "Language Update", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
             }
         }
 
@@ -401,7 +440,7 @@ limitations under the License.
 
         private static LocalizationData GetDefaultData()
         {
-            var data = new LocalizationData();
+            var data = new LocalizationData { Version = CurrentVersion };
 
             // 1. 한국어 (KO)
             var ko = new LanguageProfile { Code = "KO", Name = "한국어" };
@@ -466,7 +505,23 @@ limitations under the License.
                 { "MsgNeedMapping", "이 키는 아직 하드웨어 버튼과 연결되지 않았습니다.\n지금 매핑하시겠습니까?" }, { "TitleNeedMapping", "매핑 필요" },
                 { "MsgUnmapConfirmDetail", "Key {0} (Layer {1})의 매핑 정보를 초기화하시겠습니까?" },
                 { "MsgStartupRegistered", "관리자 권한으로 자동 실행이 등록되었습니다.\n윈도우 로그인 시 백그라운드에서 자동으로 실행됩니다." }, { "TitleStartupRegistered", "자동 실행 등록" },
-                { "MsgStartupFailed", "자동 실행 설정 실패: {0}" }
+                { "MsgStartupFailed", "자동 실행 설정 실패: {0}" },
+                { "ChkUseClipboard", "클립보드에 복사하기" },
+                { "TabGeneral", "일반 설정" },
+                { "TabProfiles", "앱 프로필" },
+                { "ActionProfileCycle", "프로필 순환" },
+                { "MsgLanguageUpdated", "언어 파일이 최신 버전으로 업데이트되었습니다.\n사용자 변경 사항은 유지됩니다." },
+                { "BtnAddProfile", "추가" }, { "BtnDeleteProfile", "삭제" }, { "BtnExportProfile", "내보내기" }, { "BtnImportProfile", "가져오기" },
+                { "MsgProcessExists", "이미 등록된 프로세스입니다." }, { "MsgDeleteProfileConfirm", "'{0}' 프로필을 삭제하시겠습니까?" }, { "TitleDeleteProfile", "삭제 확인" },
+                { "TitleExportProfile", "프로필 내보내기" }, { "MsgExportSuccess", "프로필을 성공적으로 내보냈습니다." }, { "TitleExportSuccess", "내보내기 완료" }, { "MsgExportFailed", "프로필 내보내기 실패: {0}" }, { "TitleError", "오류" }, { "MsgSelectProfile", "내보낼 프로필을 선택해주세요." },
+                { "TitleImportProfile", "프로필 가져오기" }, { "MsgInvalidProfile", "잘못된 프로필 파일 형식입니다." }, { "MsgProfileExists", "'{0}' 프로필이 이미 존재합니다.\n덮어쓰시겠습니까?" }, { "TitleDuplicate", "중복 확인" }, { "MsgImportSuccess", "프로필을 성공적으로 가져왔습니다." }, { "TitleImportSuccess", "가져오기 완료" }, { "MsgImportFailed", "프로필 가져오기 실패: {0}" },
+                { "MsgResetColorConfirm", "'{0}'의 OSD 색상을 초기화하시겠습니까?" }, { "TitleResetColor", "색상 초기화" },
+                { "GrpColor", "OSD 색상" }, { "GrpFont", "OSD 폰트" }, { "LblTargetSettings", "설정 대상:" }, { "ItemGlobal", "전역 설정 (Global)" },
+                { "BtnBgColor", "배경색" }, { "BtnHighlightColor", "강조색" }, { "BtnBorderColor", "테두리색" }, { "BtnResetColor", "초기화" }, { "BtnResetFont", "초기화" },
+                { "LblFallbackProfile", "기본 프로필 (Fallback):" }, { "LblFontFamily", "글꼴:" }, { "LblFontSize", "크기:" }, { "LblFontWeight", "굵기:" },
+                { "ChkEnableAppProfiles", "가상 레이어(앱 프로필) 기능 활성화" }, { "HeaderProfileName", "프로필 이름" }, { "HeaderProcessName", "연결된 프로세스 (.exe)" },
+                { "ActionMicMute", "마이크 음소거 (토글)" },
+                { "LblPaletteFontSize", "기능 팔레트 폰트 크기:" }
             };
             data.Languages.Add(ko);
 
@@ -533,7 +588,23 @@ limitations under the License.
                 { "MsgNeedMapping", "This key is not mapped to a hardware button yet.\nMap it now?" }, { "TitleNeedMapping", "Mapping Required" },
                 { "MsgUnmapConfirmDetail", "Reset mapping for Key {0} (Layer {1})?" },
                 { "MsgStartupRegistered", "Startup registered with admin rights.\nIt will run in background on login." }, { "TitleStartupRegistered", "Startup Registered" },
-                { "MsgStartupFailed", "Startup setup failed: {0}" }
+                { "MsgStartupFailed", "Startup setup failed: {0}" },
+                { "ChkUseClipboard", "Copy to Clipboard" },
+                { "TabGeneral", "General" },
+                { "TabProfiles", "App Profiles" },
+                { "ActionProfileCycle", "Cycle Profiles" },
+                { "MsgLanguageUpdated", "Language file updated to the latest version.\nYour changes are preserved." },
+                { "BtnAddProfile", "Add" }, { "BtnDeleteProfile", "Delete" }, { "BtnExportProfile", "Export" }, { "BtnImportProfile", "Import" },
+                { "MsgProcessExists", "Process already registered." }, { "MsgDeleteProfileConfirm", "Delete profile '{0}'?" }, { "TitleDeleteProfile", "Delete Confirmation" },
+                { "TitleExportProfile", "Export Profile" }, { "MsgExportSuccess", "Profile exported successfully." }, { "TitleExportSuccess", "Export Complete" }, { "MsgExportFailed", "Export failed: {0}" }, { "TitleError", "Error" }, { "MsgSelectProfile", "Please select a profile to export." },
+                { "TitleImportProfile", "Import Profile" }, { "MsgInvalidProfile", "Invalid profile file format." }, { "MsgProfileExists", "Profile '{0}' already exists.\nOverwrite?" }, { "TitleDuplicate", "Duplicate Check" }, { "MsgImportSuccess", "Profile imported successfully." }, { "TitleImportSuccess", "Import Complete" }, { "MsgImportFailed", "Import failed: {0}" },
+                { "MsgResetColorConfirm", "Reset OSD colors for '{0}'?" }, { "TitleResetColor", "Reset Colors" },
+                { "GrpColor", "OSD Colors" }, { "GrpFont", "OSD Fonts" }, { "LblTargetSettings", "Target:" }, { "ItemGlobal", "Global Settings" },
+                { "BtnBgColor", "Background" }, { "BtnHighlightColor", "Highlight" }, { "BtnBorderColor", "Border" }, { "BtnResetColor", "Reset" }, { "BtnResetFont", "Reset" },
+                { "LblFallbackProfile", "Default Profile (Fallback):" }, { "LblFontFamily", "Font:" }, { "LblFontSize", "Size:" }, { "LblFontWeight", "Weight:" },
+                { "ChkEnableAppProfiles", "Enable App Profiles (Virtual Layer)" }, { "HeaderProfileName", "Profile Name" }, { "HeaderProcessName", "Process Name (.exe)" },
+                { "ActionMicMute", "Mic Mute (Toggle)" },
+                { "LblPaletteFontSize", "Palette Font Size:" }
             };
             data.Languages.Add(en);
 
@@ -600,7 +671,23 @@ limitations under the License.
                 { "MsgNeedMapping", "Cette touche n'est pas encore mappée.\nLa mapper maintenant ?" }, { "TitleNeedMapping", "Mappage requis" },
                 { "MsgUnmapConfirmDetail", "Réinitialiser le mappage pour la touche {0} (Couche {1}) ?" },
                 { "MsgStartupRegistered", "Démarrage enregistré avec droits admin.\nS'exécutera en arrière-plan." }, { "TitleStartupRegistered", "Démarrage enregistré" },
-                { "MsgStartupFailed", "Échec config démarrage : {0}" }
+                { "MsgStartupFailed", "Échec config démarrage : {0}" },
+                { "ChkUseClipboard", "Copier dans le presse-papiers" },
+                { "TabGeneral", "Général" },
+                { "TabProfiles", "Profils d'application" },
+                { "ActionProfileCycle", "Cycle de profils" },
+                { "MsgLanguageUpdated", "Fichier de langue mis à jour.\nVos modifications sont conservées." },
+                { "BtnAddProfile", "Ajouter" }, { "BtnDeleteProfile", "Supprimer" }, { "BtnExportProfile", "Exporter" }, { "BtnImportProfile", "Importer" },
+                { "MsgProcessExists", "Processus déjà enregistré." }, { "MsgDeleteProfileConfirm", "Supprimer le profil '{0}' ?" }, { "TitleDeleteProfile", "Confirmation de suppression" },
+                { "TitleExportProfile", "Exporter le profil" }, { "MsgExportSuccess", "Profil exporté avec succès." }, { "TitleExportSuccess", "Exportation terminée" }, { "MsgExportFailed", "Échec de l'exportation : {0}" }, { "TitleError", "Erreur" }, { "MsgSelectProfile", "Veuillez sélectionner un profil à exporter." },
+                { "TitleImportProfile", "Importer le profil" }, { "MsgInvalidProfile", "Format de fichier de profil invalide." }, { "MsgProfileExists", "Le profil '{0}' existe déjà.\nÉcraser ?" }, { "TitleDuplicate", "Vérification de doublon" }, { "MsgImportSuccess", "Profil importé avec succès." }, { "TitleImportSuccess", "Importation terminée" }, { "MsgImportFailed", "Échec de l'importation : {0}" },
+                { "MsgResetColorConfirm", "Réinitialiser les couleurs OSD pour '{0}' ?" }, { "TitleResetColor", "Réinitialiser les couleurs" },
+                { "GrpColor", "Couleurs OSD" }, { "GrpFont", "Polices OSD" }, { "LblTargetSettings", "Cible :" }, { "ItemGlobal", "Paramètres globaux" },
+                { "BtnBgColor", "Arrière-plan" }, { "BtnHighlightColor", "Surbrillance" }, { "BtnBorderColor", "Bordure" }, { "BtnResetColor", "Réinit." }, { "BtnResetFont", "Réinit." },
+                { "LblFallbackProfile", "Profil par défaut :" }, { "LblFontFamily", "Police :" }, { "LblFontSize", "Taille :" }, { "LblFontWeight", "Graisse :" },
+                { "ChkEnableAppProfiles", "Activer les profils d'application" }, { "HeaderProfileName", "Nom du profil" }, { "HeaderProcessName", "Nom du processus (.exe)" },
+                { "ActionMicMute", "Muet Micro (Bascule)" },
+                { "LblPaletteFontSize", "Taille police palette :" }
             };
             data.Languages.Add(fr);
 
@@ -667,7 +754,23 @@ limitations under the License.
                 { "MsgNeedMapping", "Esta tecla no está asignada aún.\n¿Asignarla ahora?" }, { "TitleNeedMapping", "Asignación Requerida" },
                 { "MsgUnmapConfirmDetail", "¿Restablecer asignación para Tecla {0} (Capa {1})?" },
                 { "MsgStartupRegistered", "Inicio registrado con permisos de admin.\nSe ejecutará en segundo plano." }, { "TitleStartupRegistered", "Inicio Registrado" },
-                { "MsgStartupFailed", "Fallo config inicio: {0}" }
+                { "MsgStartupFailed", "Fallo config inicio: {0}" },
+                { "ChkUseClipboard", "Copiar al portapapeles" },
+                { "TabGeneral", "General" },
+                { "TabProfiles", "Perfiles de aplicación" },
+                { "ActionProfileCycle", "Ciclo de perfiles" },
+                { "MsgLanguageUpdated", "Archivo de idioma actualizado.\nSus cambios se conservan." },
+                { "BtnAddProfile", "Añadir" }, { "BtnDeleteProfile", "Eliminar" }, { "BtnExportProfile", "Exportar" }, { "BtnImportProfile", "Importar" },
+                { "MsgProcessExists", "Proceso ya registrado." }, { "MsgDeleteProfileConfirm", "¿Eliminar perfil '{0}'?" }, { "TitleDeleteProfile", "Confirmación de eliminación" },
+                { "TitleExportProfile", "Exportar perfil" }, { "MsgExportSuccess", "Perfil exportado con éxito." }, { "TitleExportSuccess", "Exportación completa" }, { "MsgExportFailed", "Fallo al exportar: {0}" }, { "TitleError", "Error" }, { "MsgSelectProfile", "Seleccione un perfil para exportar." },
+                { "TitleImportProfile", "Importar perfil" }, { "MsgInvalidProfile", "Formato de archivo de perfil no válido." }, { "MsgProfileExists", "El perfil '{0}' ya existe.\n¿Sobrescribir?" }, { "TitleDuplicate", "Verificación de duplicados" }, { "MsgImportSuccess", "Perfil importado con éxito." }, { "TitleImportSuccess", "Importación completa" }, { "MsgImportFailed", "Fallo al importar: {0}" },
+                { "MsgResetColorConfirm", "¿Restablecer colores OSD para '{0}'?" }, { "TitleResetColor", "Restablecer colores" },
+                { "GrpColor", "Colores OSD" }, { "GrpFont", "Fuentes OSD" }, { "LblTargetSettings", "Objetivo:" }, { "ItemGlobal", "Configuración global" },
+                { "BtnBgColor", "Fondo" }, { "BtnHighlightColor", "Resaltado" }, { "BtnBorderColor", "Borde" }, { "BtnResetColor", "Restablecer" }, { "BtnResetFont", "Restablecer" },
+                { "LblFallbackProfile", "Perfil predeterminado:" }, { "LblFontFamily", "Fuente:" }, { "LblFontSize", "Tamaño:" }, { "LblFontWeight", "Peso:" },
+                { "ChkEnableAppProfiles", "Habilitar perfiles de aplicación" }, { "HeaderProfileName", "Nombre del perfil" }, { "HeaderProcessName", "Nombre del proceso (.exe)" },
+                { "ActionMicMute", "Silenciar Micro (Alternar)" },
+                { "LblPaletteFontSize", "Tamaño fuente paleta:" }
             };
             data.Languages.Add(es);
 
@@ -734,7 +837,23 @@ limitations under the License.
                 { "MsgNeedMapping", "此按键尚未映射到硬件按钮。\n现在映射吗？" }, { "TitleNeedMapping", "需要映射" },
                 { "MsgUnmapConfirmDetail", "重置按键 {0} (层 {1}) 的映射？" },
                 { "MsgStartupRegistered", "已使用管理员权限注册启动。\n登录时将在后台运行。" }, { "TitleStartupRegistered", "启动已注册" },
-                { "MsgStartupFailed", "启动设置失败: {0}" }
+                { "MsgStartupFailed", "启动设置失败: {0}" },
+                { "ChkUseClipboard", "复制到剪贴板" },
+                { "TabGeneral", "常规设置" },
+                { "TabProfiles", "应用配置文件" },
+                { "ActionProfileCycle", "循环切换配置文件" },
+                { "MsgLanguageUpdated", "语言文件已更新至最新版本。\n您的更改已保留。" },
+                { "BtnAddProfile", "添加" }, { "BtnDeleteProfile", "删除" }, { "BtnExportProfile", "导出" }, { "BtnImportProfile", "导入" },
+                { "MsgProcessExists", "进程已注册。" }, { "MsgDeleteProfileConfirm", "删除配置文件 '{0}'?" }, { "TitleDeleteProfile", "删除确认" },
+                { "TitleExportProfile", "导出配置文件" }, { "MsgExportSuccess", "配置文件导出成功。" }, { "TitleExportSuccess", "导出完成" }, { "MsgExportFailed", "导出失败: {0}" }, { "TitleError", "错误" }, { "MsgSelectProfile", "请选择要导出的配置文件。" },
+                { "TitleImportProfile", "导入配置文件" }, { "MsgInvalidProfile", "无效的配置文件格式。" }, { "MsgProfileExists", "配置文件 '{0}' 已存在。\n覆盖吗？" }, { "TitleDuplicate", "重复检查" }, { "MsgImportSuccess", "配置文件导入成功。" }, { "TitleImportSuccess", "导入完成" }, { "MsgImportFailed", "导入失败: {0}" },
+                { "MsgResetColorConfirm", "重置 '{0}' 的 OSD 颜色？" }, { "TitleResetColor", "重置颜色" },
+                { "GrpColor", "OSD 颜色" }, { "GrpFont", "OSD 字体" }, { "LblTargetSettings", "目标:" }, { "ItemGlobal", "全局设置" },
+                { "BtnBgColor", "背景色" }, { "BtnHighlightColor", "高亮色" }, { "BtnBorderColor", "边框色" }, { "BtnResetColor", "重置" }, { "BtnResetFont", "重置" },
+                { "LblFallbackProfile", "默认配置文件:" }, { "LblFontFamily", "字体:" }, { "LblFontSize", "大小:" }, { "LblFontWeight", "粗细:" },
+                { "ChkEnableAppProfiles", "启用应用配置文件" }, { "HeaderProfileName", "配置文件名称" }, { "HeaderProcessName", "进程名称 (.exe)" },
+                { "ActionMicMute", "麦克风静音 (切换)" },
+                { "LblPaletteFontSize", "功能面板字体大小:" }
             };
             data.Languages.Add(cn);
 
@@ -801,7 +920,23 @@ limitations under the License.
                 { "MsgNeedMapping", "Diese Taste ist noch nicht zugewiesen.\nJetzt zuweisen?" }, { "TitleNeedMapping", "Zuweisung erforderlich" },
                 { "MsgUnmapConfirmDetail", "Zuordnung für Taste {0} (Ebene {1}) zurücksetzen?" },
                 { "MsgStartupRegistered", "Autostart mit Admin-Rechten registriert.\nLäuft beim Login im Hintergrund." }, { "TitleStartupRegistered", "Autostart registriert" },
-                { "MsgStartupFailed", "Autostart-Fehler: {0}" }
+                { "MsgStartupFailed", "Autostart-Fehler: {0}" },
+                { "ChkUseClipboard", "In Zwischenablage kopieren" },
+                { "TabGeneral", "Allgemein" },
+                { "TabProfiles", "App-Profile" },
+                { "ActionProfileCycle", "Profile durchwechseln" },
+                { "MsgLanguageUpdated", "Sprachdatei auf die neueste Version aktualisiert.\nIhre Änderungen bleiben erhalten." },
+                { "BtnAddProfile", "Hinzufügen" }, { "BtnDeleteProfile", "Löschen" }, { "BtnExportProfile", "Exportieren" }, { "BtnImportProfile", "Importieren" },
+                { "MsgProcessExists", "Prozess bereits registriert." }, { "MsgDeleteProfileConfirm", "Profil '{0}' löschen?" }, { "TitleDeleteProfile", "Löschbestätigung" },
+                { "TitleExportProfile", "Profil exportieren" }, { "MsgExportSuccess", "Profil erfolgreich exportiert." }, { "TitleExportSuccess", "Export abgeschlossen" }, { "MsgExportFailed", "Export fehlgeschlagen: {0}" }, { "TitleError", "Fehler" }, { "MsgSelectProfile", "Bitte wählen Sie ein Profil zum Exportieren." },
+                { "TitleImportProfile", "Profil importieren" }, { "MsgInvalidProfile", "Ungültiges Profil-Dateiformat." }, { "MsgProfileExists", "Profil '{0}' existiert bereits.\nÜberschreiben?" }, { "TitleDuplicate", "Duplikatprüfung" }, { "MsgImportSuccess", "Profil erfolgreich importiert." }, { "TitleImportSuccess", "Import abgeschlossen" }, { "MsgImportFailed", "Import fehlgeschlagen: {0}" },
+                { "MsgResetColorConfirm", "OSD-Farben für '{0}' zurücksetzen?" }, { "TitleResetColor", "Farben zurücksetzen" },
+                { "GrpColor", "OSD-Farben" }, { "GrpFont", "OSD-Schriftarten" }, { "LblTargetSettings", "Ziel:" }, { "ItemGlobal", "Globale Einstellungen" },
+                { "BtnBgColor", "Hintergrund" }, { "BtnHighlightColor", "Hervorhebung" }, { "BtnBorderColor", "Rand" }, { "BtnResetColor", "Zurücksetzen" }, { "BtnResetFont", "Zurücksetzen" },
+                { "LblFallbackProfile", "Standardprofil:" }, { "LblFontFamily", "Schriftart:" }, { "LblFontSize", "Größe:" }, { "LblFontWeight", "Gewicht:" },
+                { "ChkEnableAppProfiles", "App-Profile aktivieren" }, { "HeaderProfileName", "Profilname" }, { "HeaderProcessName", "Prozessname (.exe)" },
+                { "ActionMicMute", "Mikrofon stumm (Umschalten)" },
+                { "LblPaletteFontSize", "Paletten-Schriftgröße:" }
             };
             data.Languages.Add(de);
 

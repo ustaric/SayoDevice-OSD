@@ -5,14 +5,59 @@ using System.Threading.Tasks;
 using SayoOSD.Services;
 using NAudio.CoreAudioApi; // [추가] NAudio 사용
 using SayoOSD.Managers; // [추가] LanguageManager 사용
+using SayoOSD.Helpers; // [추가] IconHelper 사용
 
 namespace SayoOSD.Services
 {
     public class InputExecutor
     {
-        // Win32 API: 키보드 이벤트 시뮬레이션
+        #region Win32 API & Structures for SendInput
+
+        // [수정] keybd_event 대신 SendInput API 사용
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint SendInput(uint nInputs, [MarshalAs(UnmanagedType.LPArray), In] INPUT[] pInputs, int cbSize);
+
         [DllImport("user32.dll")]
-        static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+        private static extern IntPtr GetMessageExtraInfo();
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct INPUT
+        {
+            public uint type;
+            public InputUnion u;
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        private struct InputUnion
+        {
+            [FieldOffset(0)]
+            public MOUSEINPUT mi;
+            [FieldOffset(0)]
+            public KEYBDINPUT ki;
+            [FieldOffset(0)]
+            public HARDWAREINPUT hi;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct KEYBDINPUT
+        {
+            public ushort wVk;
+            public ushort wScan;
+            public uint dwFlags;
+            public uint time;
+            public IntPtr dwExtraInfo;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public IntPtr dwExtraInfo; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct HARDWAREINPUT { public uint uMsg; public ushort wParamL, wParamH; }
+
+        private const int INPUT_KEYBOARD = 1;
+        private const uint KEYEVENTF_KEYUP = 0x0002;
+
+        #endregion
 
         [DllImport("user32.dll")]
         private static extern bool IsIconic(IntPtr hWnd);
@@ -47,6 +92,7 @@ namespace SayoOSD.Services
         // 상수 정의 (MainWindow에서 이동됨)
         public const int ACTION_RUN_PROGRAM = 200;
         public const int ACTION_TEXT_MACRO = 201;
+        public const int ACTION_TEXT_MACRO_CLIPBOARD = 203; // [추가] 클립보드 복사 매크로
         public const int ACTION_AUDIO_CYCLE = 202; // [추가]
         public const int LAYER_MIC_MUTE = 99;      // [추가]
         
@@ -96,6 +142,7 @@ namespace SayoOSD.Services
                 case ACTION_MEDIA_PLAYPAUSE: 
                     vkCode = 0xB3; // VK_MEDIA_PLAY_PAUSE
                     actionName = "Play/Pause"; 
+                    Log($"[Process] Play/Pause: Action selected (VK: {vkCode:X2})");
                     break;
                 case ACTION_MEDIA_NEXT: 
                     vkCode = 0xB0; // VK_MEDIA_NEXT_TRACK
@@ -137,8 +184,44 @@ namespace SayoOSD.Services
 
                     for (int i = 0; i < repeatCount; i++)
                     {
-                        keybd_event(vkCode, 0, 0, UIntPtr.Zero);
-                        keybd_event(vkCode, 0, 2, UIntPtr.Zero);
+                        // [수정] keybd_event 대신 SendInput API 사용
+                        INPUT[] inputs = new INPUT[2];
+
+                        inputs[0] = new INPUT
+                        {
+                            type = INPUT_KEYBOARD,
+                            u = new InputUnion
+                            {
+                                ki = new KEYBDINPUT
+                                {
+                                    wVk = vkCode,
+                                    wScan = 0,
+                                    dwFlags = 0, // Key press
+                                    time = 0,
+                                    dwExtraInfo = GetMessageExtraInfo()
+                                }
+                            }
+                        };
+
+                        inputs[1] = new INPUT
+                        {
+                            type = INPUT_KEYBOARD,
+                            u = new InputUnion
+                            {
+                                ki = new KEYBDINPUT
+                                {
+                                    wVk = vkCode,
+                                    wScan = 0,
+                                    dwFlags = KEYEVENTF_KEYUP,
+                                    time = 0,
+                                    dwExtraInfo = GetMessageExtraInfo()
+                                }
+                            }
+                        };
+
+                        if (actionType == ACTION_MEDIA_PLAYPAUSE) Log($"[Process] Play/Pause: Sending Input (KeyDown & KeyUp)...");
+
+                        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
                     }
 
                     // [추가] 볼륨 조절 시 현재 볼륨 OSD 표시
@@ -281,15 +364,34 @@ namespace SayoOSD.Services
         }
 
         // 텍스트 매크로 실행
-        public void ExecuteMacro(string text)
+        public void ExecuteMacro(string text, bool useClipboard = false)
         {
             if (string.IsNullOrEmpty(text)) return;
 
             try
             {
-                // SendKeys를 사용하여 텍스트 입력 시뮬레이션
-                System.Windows.Forms.SendKeys.SendWait(text);
-                Log($"[Macro] Text Sent: {text}");
+                if (useClipboard)
+                {
+                    // [수정] 클립보드 복사만 수행 (붙여넣기 제거)
+                    System.Threading.Thread t = new System.Threading.Thread(() =>
+                    {
+                        try
+                        {
+                            System.Windows.Forms.Clipboard.SetText(text);
+                        }
+                        catch { }
+                    });
+                    t.SetApartmentState(System.Threading.ApartmentState.STA);
+                    t.Start();
+                    t.Join();
+                    Log($"[Macro] Clipboard Copy: {text}");
+                }
+                else
+                {
+                    // SendKeys를 사용하여 텍스트 입력 시뮬레이션
+                    System.Windows.Forms.SendKeys.SendWait(text);
+                    Log($"[Macro] Text Sent: {text}");
+                }
             }
             catch (Exception ex)
             {
@@ -334,6 +436,13 @@ namespace SayoOSD.Services
                                 args = path.Substring(splitIndex).Trim();
                         }
                     }
+                }
+
+                // [추가] 실행 전 경로 보정 (업데이트로 인해 경로가 바뀐 경우 대응)
+                if (!System.IO.File.Exists(exePath))
+                {
+                    string resolved = IconHelper.ResolvePath(exePath);
+                    if (resolved != null) exePath = resolved;
                 }
 
                 // [수정] 제어할 프로세스 이름 결정

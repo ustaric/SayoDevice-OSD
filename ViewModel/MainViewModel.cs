@@ -74,6 +74,52 @@ namespace SayoOSD.ViewModels
             }
         }
 
+        // [추가] 가상 레이어(앱 프로필) 관련 프로퍼티
+        public ObservableCollection<AppProfile> AppProfiles { get; private set; }
+
+        private AppProfile _selectedAppProfile;
+        public AppProfile SelectedAppProfile
+        {
+            get => _selectedAppProfile;
+            set
+            {
+                if (_selectedAppProfile != value)
+                {
+                    _selectedAppProfile = value;
+                    OnPropertyChanged();
+                    if (_selectedAppProfile != null)
+                    {
+                        IsVirtualLayerMode = true;
+                        _settings.LastVirtualProfileName = _selectedAppProfile.Name; // [추가] 선택된 프로필 상태 저장
+                        LoadKeySlotsFromProfile(_selectedAppProfile);
+                    }
+                }
+            }
+        }
+
+        private bool _isVirtualLayerMode;
+        public bool IsVirtualLayerMode
+        {
+            get => _isVirtualLayerMode;
+            set
+            {
+                if (_isVirtualLayerMode != value)
+                {
+                    _isVirtualLayerMode = value;
+                    OnPropertyChanged();
+                    // 가상 모드가 해제되면 하드웨어 레이어로 복귀
+                    if (!_isVirtualLayerMode)
+                    {
+                        _selectedAppProfile = null; // 내부 필드만 초기화 (프로퍼티 세터 로직 방지)
+                        _settings.LastVirtualProfileName = null; // [추가] 가상 모드 해제 시 상태 초기화
+                        OnPropertyChanged(nameof(SelectedAppProfile));
+                        LoadKeySlotsForLayer(CurrentLayer);
+                        RequestOsdUpdate?.Invoke();
+                    }
+                }
+            }
+        }
+
         public ObservableCollection<LogEntry> LogEntries { get; }
 
         public ObservableCollection<KeySlotViewModel> KeySlots { get; }
@@ -201,6 +247,19 @@ namespace SayoOSD.ViewModels
             LogEntries = new ObservableCollection<LogEntry>();
             KeySlots = new ObservableCollection<KeySlotViewModel>();
 
+            // [추가] 앱 프로필 컬렉션 초기화
+            AppProfiles = new ObservableCollection<AppProfile>(_settings.AppProfiles);
+
+            // [추가] 마지막 가상 프로필 상태 복원
+            if (!string.IsNullOrEmpty(_settings.LastVirtualProfileName))
+            {
+                var profile = AppProfiles.FirstOrDefault(p => p.Name == _settings.LastVirtualProfileName);
+                if (profile != null)
+                {
+                    SelectedAppProfile = profile;
+                }
+            }
+
             // 3. 속성 초기화
             _currentLayer = _settings.LastLayerIndex;
             LoadKeySlotsForLayer(_currentLayer);
@@ -219,6 +278,8 @@ namespace SayoOSD.ViewModels
             {
                 if (p != null && int.TryParse(p.ToString(), out int layer))
                 {
+                    // [추가] 하드웨어 레이어 버튼 클릭 시 가상 모드 해제
+                    IsVirtualLayerMode = false;
                     CurrentLayer = layer;
                     _settings.LastLayerIndex = layer;
                 }
@@ -332,10 +393,55 @@ namespace SayoOSD.ViewModels
 
         public void LoadKeySlotsForLayer(int layer)
         {
+            // [수정] 현재 선택된 인덱스 기억
+            int previousIndex = SelectedSlot?.Index ?? 1;
+
             KeySlots.Clear();
             var buttonConfigs = _settings.Buttons.Where(b => b.Layer == layer).OrderBy(b => b.Index);
             foreach (var config in buttonConfigs) KeySlots.Add(new KeySlotViewModel(config));
-            SelectedSlot = KeySlots.FirstOrDefault();
+            // [수정] 이전 선택 복구
+            SelectedSlot = KeySlots.FirstOrDefault(k => k.Index == previousIndex) ?? KeySlots.FirstOrDefault();
+        }
+
+        // [추가] 프로필에서 키 슬롯 로드
+        public void LoadKeySlotsFromProfile(AppProfile profile)
+        {
+            // [수정] 현재 선택된 인덱스 기억
+            int previousIndex = SelectedSlot?.Index ?? 1;
+
+            KeySlots.Clear();
+            if (profile != null)
+            {
+                // 버튼이 없으면 초기화 (안전장치)
+                if (profile.Buttons.Count == 0)
+                {
+                    for (int i = 1; i <= 12; i++) profile.Buttons.Add(new ButtonConfig { Index = i, Layer = -1, Name = $"Key {i}" });
+                }
+
+                foreach (var config in profile.Buttons.OrderBy(b => b.Index))
+                {
+                    KeySlots.Add(new KeySlotViewModel(config));
+                }
+            }
+            // [수정] 이전 선택 복구
+            SelectedSlot = KeySlots.FirstOrDefault(k => k.Index == previousIndex) ?? KeySlots.FirstOrDefault();
+        }
+
+        // [추가] 설정 변경 시 프로필 목록 갱신
+        public void RefreshAppProfiles()
+        {
+            // [수정] 목록이 동일하면 갱신하지 않음 (선택 상태 유지)
+            if (AppProfiles.Count == _settings.AppProfiles.Count && 
+                !AppProfiles.Where((t, i) => t != _settings.AppProfiles[i]).Any())
+            {
+                return;
+            }
+
+            AppProfiles.Clear();
+            foreach (var p in _settings.AppProfiles)
+            {
+                AppProfiles.Add(p);
+            }
         }
 
         private void SelectedSlot_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -349,7 +455,7 @@ namespace SayoOSD.ViewModels
         private void UpdateDetailPanelVisibility()
         {
             if (SelectedSlot != null && 
-                (SelectedSlot.TargetLayer == 200 || SelectedSlot.TargetLayer == 201)) // 200: Run, 201: Macro
+                (SelectedSlot.TargetLayer == InputExecutor.ACTION_RUN_PROGRAM || SelectedSlot.IsMacroMode)) // [수정] 매크로(201, 203) 포함
             {
                 IsDetailPanelVisible = true;
             }
@@ -381,6 +487,12 @@ namespace SayoOSD.ViewModels
                 if (_recentPackets.Count > 20) _recentPackets.Dequeue();
             }
 
+            // [추가] 3번째 바이트(Index 2)가 0x37(Release)인 경우 무시 (0x36 Press만 처리)
+            if (data.Length > 2 && data[2] == 0x37)
+            {
+                return;
+            }
+
             string hex = BitConverter.ToString(data).Replace("-", " ");
             string signature = GetSignature(data);
 
@@ -408,12 +520,6 @@ namespace SayoOSD.ViewModels
 
                 if (hex.StartsWith("C6")) return;
 
-                // [추가] 3번째 바이트(Index 2)가 0x37(Release)인 경우 매핑하지 않고 무시 (0x36 Press만 허용)
-                if (data.Length > 2 && data[2] == 0x37)
-                {
-                    return;
-                }
-
                 string currentKey = (data.Length > 10) ? data[10].ToString("X2") : "";
                 if (_ignoredSignatures.Contains(currentKey))
                 {
@@ -433,11 +539,41 @@ namespace SayoOSD.ViewModels
                 return;
             }
 
+            // [추가] 가상 레이어 모드일 때: 가상 프로필에 직접 매핑된 키가 있는지 우선 확인
+            // 하드웨어 레이어 매핑 여부와 관계없이 가상 레이어 설정을 독립적으로 동작하게 함
+            if (IsVirtualLayerMode && SelectedAppProfile != null)
+            {
+                var directVBtn = SelectedAppProfile.Buttons.FirstOrDefault(b => b.TriggerPattern == signature);
+                if (directVBtn != null)
+                {
+                    ExecuteButtonLogic(directVBtn, out bool? vMicState);
+                    HandleOsdAndLog(data, hex, directVBtn, vMicState);
+                    return;
+                }
+            }
+
             var btn = FindMappedButton(signature);
 
             if (btn == null)
             {
                 LogUnknownSignal(data, hex);
+                return;
+            }
+
+            // [추가] 가상 레이어 모드일 경우 인터셉트 처리
+            if (IsVirtualLayerMode && SelectedAppProfile != null)
+            {
+                // 하드웨어 버튼의 인덱스와 일치하는 가상 버튼 찾기
+                var virtualBtn = SelectedAppProfile.Buttons.FirstOrDefault(b => b.Index == btn.Index);
+                if (virtualBtn != null)
+                {
+                    // 가상 버튼 로직 실행 (하드웨어 레이어 변경은 무시)
+                    ExecuteButtonLogic(virtualBtn, out bool? vMicState);
+                    
+                    // OSD 및 로그 업데이트
+                    HandleOsdAndLog(data, hex, virtualBtn, vMicState);
+                }
+                // [수정] 가상 레이어 모드에서는 가상 버튼 존재 여부와 상관없이 하드웨어 레이어 동작 차단
                 return;
             }
 
@@ -503,9 +639,9 @@ namespace SayoOSD.ViewModels
             {
                 _inputExecutor.ExecuteMediaKey(btn.TargetLayer, btn.Index);
             }
-            else if (btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO && !string.IsNullOrEmpty(btn.ProgramPath))
+            else if ((btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO || btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO_CLIPBOARD) && !string.IsNullOrEmpty(btn.ProgramPath))
             {
-                _inputExecutor.ExecuteMacro(btn.ProgramPath);
+                _inputExecutor.ExecuteMacro(btn.ProgramPath, btn.TargetLayer == InputExecutor.ACTION_TEXT_MACRO_CLIPBOARD);
             }
             else if (btn.TargetLayer == InputExecutor.ACTION_AUDIO_CYCLE)
             {
@@ -521,7 +657,20 @@ namespace SayoOSD.ViewModels
             {
                 CycleOsdMode(btn);
             }
-            else if (CurrentLayer != btn.Layer)
+            else if (btn.TargetLayer == 301 /* ACTION_SWITCH_PROFILE */)
+            {
+                if (!string.IsNullOrEmpty(btn.ProgramPath))
+                {
+                    var profile = AppProfiles.FirstOrDefault(p => p.Name == btn.ProgramPath);
+                    if (profile != null) ActivateVirtualProfile(profile);
+                }
+            }
+            else if (btn.TargetLayer == 302 /* ACTION_PROFILE_CYCLE */)
+            {
+                CycleAppProfiles();
+            }
+            // [수정] 가상 버튼(Layer -1)일 경우 레이어 변경 로직을 수행하지 않음
+            else if (btn.Layer != -1 && CurrentLayer != btn.Layer)
             {
                 newLayer = btn.Layer;
             }
@@ -559,6 +708,24 @@ namespace SayoOSD.ViewModels
             RequestOsdFeedback?.Invoke(modeName, null, -1);
 
             AddLog($"[OSD] Mode changed to {nextMode} ({modeName})");
+        }
+
+        private void CycleAppProfiles()
+        {
+            if (AppProfiles == null || AppProfiles.Count == 0) return;
+
+            int nextIndex = 0;
+            // 현재 가상 레이어 모드이고 프로필이 선택되어 있다면 다음 인덱스 계산
+            if (IsVirtualLayerMode && SelectedAppProfile != null)
+            {
+                int currentIndex = AppProfiles.IndexOf(SelectedAppProfile);
+                if (currentIndex >= 0)
+                {
+                    nextIndex = (currentIndex + 1) % AppProfiles.Count;
+                }
+            }
+            
+            ActivateVirtualProfile(AppProfiles[nextIndex]);
         }
 
         private void ChangeLayer(int newLayer)
@@ -619,6 +786,31 @@ namespace SayoOSD.ViewModels
                 return;
             }
 
+            // [수정] 가상 레이어 모드일 경우: 가상 프로필에만 키 매핑 저장 (하드웨어 레이어 영향 없음)
+            if (IsVirtualLayerMode && SelectedAppProfile != null)
+            {
+                // 현재 프로필 내에서 동일한 신호를 가진 키가 있다면 초기화 (중복 방지)
+                foreach (var b in SelectedAppProfile.Buttons)
+                {
+                    if (b.TriggerPattern == signature) b.TriggerPattern = null;
+                }
+
+                var vBtn = SelectedAppProfile.Buttons.FirstOrDefault(b => b.Index == SelectedSlot.Index);
+                if (vBtn != null)
+                {
+                    vBtn.TriggerPattern = signature;
+                    // 가상 버튼은 이미 ViewModel과 바인딩되어 기능(TargetLayer)이 설정되어 있음
+                    
+                    RequestOsdUpdate?.Invoke();
+                    RequestOsdHighlight?.Invoke(SelectedSlot.Index, null);
+                    LoadKeySlotsFromProfile(SelectedAppProfile); // VM 갱신
+                    
+                    RequestAutoMappingConfirmation?.Invoke(signature);
+                    StopDetection();
+                }
+                return;
+            }
+
             foreach (var b in _settings.Buttons)
             {
                 if (b.Layer == CurrentLayer && b.TriggerPattern == signature) b.TriggerPattern = null;
@@ -628,13 +820,29 @@ namespace SayoOSD.ViewModels
             if (btn != null)
             {
                 btn.TriggerPattern = signature;
-                btn.TargetLayer = SelectedSlot.TargetLayer;
+                
+                // [수정] 가상 레이어 모드일 때는 하드웨어 버튼의 기능(TargetLayer)을 덮어쓰지 않음
+                // 오직 물리적 키 매핑(TriggerPattern)만 연결하여, 하드웨어 레이어의 기존 기능은 보존
+                if (!IsVirtualLayerMode)
+                {
+                    btn.TargetLayer = SelectedSlot.TargetLayer;
+                }
 
-                AppSettings.Save(_settings);
+                // [수정] 매핑 시마다 자동 저장하지 않음 (메모리에만 적용)
+                // 사용자가 '저장' 버튼을 누르거나 프로그램 종료 시 일괄 저장됨
 
                 RequestOsdUpdate?.Invoke();
                 RequestOsdHighlight?.Invoke(SelectedSlot.Index, null);
-                LoadKeySlotsForLayer(CurrentLayer);
+                
+                // [수정] 가상 레이어 모드일 경우 해당 프로필 화면 유지
+                if (IsVirtualLayerMode && SelectedAppProfile != null)
+                {
+                    LoadKeySlotsFromProfile(SelectedAppProfile);
+                }
+                else
+                {
+                    LoadKeySlotsForLayer(CurrentLayer);
+                }
 
                 RequestAutoMappingConfirmation?.Invoke(signature);
                 StopDetection();
@@ -695,10 +903,11 @@ namespace SayoOSD.ViewModels
             ManualDetectButtonText = LanguageManager.GetString(_settings.Language, "BtnManualDetect");
         }
 
-        // [추가] 활성 창 변경 시 아이콘 업데이트 로직
-        public void UpdateActiveWindowIcons(string iconPath)
+        // [수정] 활성 창 변경 처리 (아이콘 업데이트 및 프로필 자동 전환)
+        public void HandleActiveWindowChange(string processPath)
         {
-            bool needUpdate = false;
+            // 1. 아이콘 업데이트 (기존 로직 유지)
+            bool iconUpdated = false;
 
             // 현재 레이어의 버튼 중 '활성 창 볼륨 조절' 기능이 있는 버튼 찾기
             // 110: Active Vol Up, 111: Active Vol Down
@@ -708,19 +917,64 @@ namespace SayoOSD.ViewModels
 
             foreach (var btn in activeVolButtons)
             {
-                // 아이콘 경로를 메모리 상에서만 업데이트 (저장은 하지 않음)
-                if (btn.IconPath != iconPath)
+                if (btn.IconPath != processPath)
                 {
-                    btn.IconPath = iconPath;
-                    needUpdate = true;
+                    btn.IconPath = processPath;
+                    iconUpdated = true;
                 }
             }
 
-            if (needUpdate)
+            if (iconUpdated)
             {
                 // OSD 화면 갱신 요청
                 System.Windows.Application.Current.Dispatcher.Invoke(() => RequestOsdUpdate?.Invoke());
             }
+
+            // 2. 가상 레이어(앱 프로필) 자동 전환 로직
+            if (!_settings.EnableAppProfiles) return;
+
+            string processName = System.IO.Path.GetFileName(processPath);
+            if (string.IsNullOrEmpty(processName)) return;
+
+            // 매칭되는 프로필 검색
+            var profile = _settings.AppProfiles.FirstOrDefault(p => p.ProcessName.Equals(processName, StringComparison.OrdinalIgnoreCase));
+
+            if (profile != null)
+            {
+                // 매칭 성공 -> 해당 프로필 활성화
+                ActivateVirtualProfile(profile);
+            }
+            else
+            {
+                // 매칭 실패 -> Fallback 확인
+                if (!string.IsNullOrEmpty(_settings.FallbackProfileId))
+                {
+                    var fallback = _settings.AppProfiles.FirstOrDefault(p => p.Name == _settings.FallbackProfileId);
+                    if (fallback != null)
+                    {
+                        ActivateVirtualProfile(fallback);
+                        return;
+                    }
+                }
+
+                // Fallback도 없으면 -> 하드웨어 레이어로 복귀
+                if (IsVirtualLayerMode)
+                {
+                    System.Windows.Application.Current.Dispatcher.Invoke(() => IsVirtualLayerMode = false);
+                }
+            }
+        }
+
+        private void ActivateVirtualProfile(AppProfile profile)
+        {
+            if (IsVirtualLayerMode && SelectedAppProfile == profile) return;
+
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                SelectedAppProfile = profile; // 이 설정이 IsVirtualLayerMode = true로 만들고 슬롯을 로드함
+                RequestOsdUpdate?.Invoke();
+                RequestOsdFeedback?.Invoke(profile.Name, null, -1); // 프로필 이름 OSD 표시
+            });
         }
 
         #endregion
